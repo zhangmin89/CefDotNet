@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+    <PropertyGroup>
+        <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+        <!-- 可选：禁止项目通过 VersionOverride 私自覆盖中央版本 -->
+        <CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>
+        <MicrosoftExtensionsVersion>10.0.11</MicrosoftExtensionsVersion>
+        <AvaloniaVersion>11.3.20</AvaloniaVersion>
+    </PropertyGroup>
+    <ItemGroup>
+    </ItemGroup>
+</Project>

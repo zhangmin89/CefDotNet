@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project>
+    <PropertyGroup>
+        <Authors>zhangmin</Authors>
+
+        <!-- C# 配置 -->
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <!-- net4.0 nullable -->
+        <LangVersion>latest</LangVersion>
+
+        <!-- 代码质量 -->
+        <!--  警告也报错-->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <!-- 放过可空引用类型的警告（CS8600-CS8630系列） -->
+        <!-- 放过代码风格警告（IDE开头的） -->
+        <!-- 放过NuGet警告（NU开头的） -->
+        <WarningsNotAsErrors>
+        </WarningsNotAsErrors>
+        <!--  代码风格也报错-->
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+        <!-- 构建 -->
+        <Deterministic>true</Deterministic>
+        <DebugType>portable</DebugType>
+    </PropertyGroup>
+</Project>
