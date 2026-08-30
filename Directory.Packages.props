@@ -8,5 +8,10 @@
         <AvaloniaVersion>11.3.20</AvaloniaVersion>
     </PropertyGroup>
     <ItemGroup>
+        <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
+        <PackageVersion Include="CefSharp.OffScreen.NETCore" Version="151.3.170" />
     </ItemGroup>
 </Project>
