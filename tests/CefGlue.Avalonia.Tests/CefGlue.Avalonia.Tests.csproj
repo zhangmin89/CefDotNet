@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(DotnetVersion)</TargetFramework>
+    <AssemblyName>CefGlue.Avalonia.Tests</AssemblyName>
+    <RootNamespace>CefGlue.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CefGlueUseLocalRuntimeAssets>true</CefGlueUseLocalRuntimeAssets>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug_WindowlessRender'">
+    <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="Helpers\App.xaml" />
+    <AvaloniaResource Include="Helpers\App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </AvaloniaResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Simple" />
+    <PackageReference Include="nunit" />
+    <PackageReference Include="NUnit3TestAdapter" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\CefGlue.Avalonia\CefGlue.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
+    <ProjectReference Include="..\..\src\CefGlue.Common\CefGlue.Common.csproj" />
+    <ProjectReference Include="..\..\src\CefGlue\CefGlue.csproj" />
+  </ItemGroup>
+
+</Project>

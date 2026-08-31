@@ -1,0 +1,31 @@
+<Project>
+  <PropertyGroup Condition="'$(IsPackable)' == 'false'">
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <DocumentationFile />
+  </PropertyGroup>
+
+  <Target Name="ValidateCefGluePackageArchitecture" BeforeTargets="PrepareForBuild" Condition="'$(CefGluePackageArchitecture)' != 'x64' and '$(CefGluePackageArchitecture)' != 'arm64'">
+    <Error Text="CefGluePackageArchitecture must be 'x64' or 'arm64', but was '$(CefGluePackageArchitecture)'." />
+  </Target>
+
+  <!-- NuGet 自动导入 buildTransitive；仓库内的示例和测试通过同一份目标消费本地产物。 -->
+  <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+    <CefGlueRuntimePackageArchitecture>$(CefGluePackageArchitecture)</CefGlueRuntimePackageArchitecture>
+    <CefGluePrepareRuntimeAssetsTargets>PublishCefGlueBrowserProcessForLocalBuild</CefGluePrepareRuntimeAssetsTargets>
+  </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.props" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
+
+  <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+    <CefGlueBrowserProcessAssetsPath>$(CefGlueArtifactsPath)browser-process\local\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)\</CefGlueBrowserProcessAssetsPath>
+    <CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</CefGlueBrowserProcessExecutableName>
+    <CefGlueBrowserProcessExecutableName Condition="'$(CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</CefGlueBrowserProcessExecutableName>
+  </PropertyGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.targets" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
+
+  <Target Name="PublishCefGlueBrowserProcessForLocalBuild" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+    <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Publish" BuildInParallel="false" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;PublishTrimmed=true;PublishDir=$(CefGlueBrowserProcessAssetsPath);CefGluePackageArchitecture=$(CefGlueRuntimePackageArchitecture)" />
+    <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)')" Text="CefGlue browser process publish did not produce '$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)'." />
+  </Target>
+</Project>

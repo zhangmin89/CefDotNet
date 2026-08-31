@@ -1,0 +1,92 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>$(DotnetVersion)</TargetFramework>
+        <AssemblyName>Xilium.CefGlue.Common</AssemblyName>
+        <RootNamespace>Xilium.CefGlue.Common</RootNamespace>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsPackable>true</IsPackable>
+        <PackageId>CefGlue.Common$(CefGluePackageSuffix)</PackageId>
+        <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);CollectBrowserProcessesForPackage</TargetsForTfmSpecificContentInPackage>
+        <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+        <CefGlueBrowserProcessPackageArtifactsPath>$(CefGlueArtifactsPath)browser-process\package\$(Configuration)\$(CefGluePackageArchitecture)\</CefGlueBrowserProcessPackageArtifactsPath>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Remove="BaseCefBrowser.cs" />
+        <Compile Remove="CommonBrowserBehaviors.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="BaseCefBrowser.cs" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($(DefineConstants), '(^|;)HAS_NLOG($|;)'))">
+        <PackageReference Include="NLog" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(CefGluePackageArchitecture)' == 'x64'">
+        <PackageReference Include="chromiumembeddedframework.runtime.win-x64" />
+        <PackageReference Include="cef.redist.osx64" />
+        <PackageReference Include="cef.redist.linux64" />
+    </ItemGroup>
+
+    <ItemGroup Condition="'$(CefGluePackageArchitecture)' == 'arm64'">
+        <PackageReference Include="chromiumembeddedframework.runtime.win-arm64" />
+        <PackageReference Include="cef.redist.osx.arm64" />
+        <PackageReference Include="cef.redist.linuxarm64" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="chromiumembeddedframework.runtime" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj">
+            <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+            <IncludeAssets>CefGlue.Common.Shared.dll</IncludeAssets>
+        </ProjectReference>
+
+        <ProjectReference Include="..\CefGlue\CefGlue.csproj">
+            <ReferenceOutputAssembly>true</ReferenceOutputAssembly>
+            <IncludeAssets>CefGlue.dll</IncludeAssets>
+        </ProjectReference>
+
+        <ProjectReference Include="..\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj">
+            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+            <PrivateAssets>all</PrivateAssets>
+        </ProjectReference>
+
+        <None Include="buildTransitive\CefGlue.Common.props" Pack="true" PackagePath="buildTransitive\CefGlue.Common$(CefGluePackageSuffix).props" />
+        <None Include="buildTransitive\CefGlue.Common.targets" Pack="true" PackagePath="buildTransitive\CefGlue.Common$(CefGluePackageSuffix).targets" />
+    </ItemGroup>
+
+    <Target DependsOnTargets="ResolveReferences" Name="CopyProjectReferencesToPackage">
+        <ItemGroup>
+            <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths-&gt;WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="PublishBrowserProcessesForPackage">
+        <ItemGroup>
+            <_CefGlueBrowserProcessRuntimeIdentifier Include="win-$(CefGluePackageArchitecture);linux-$(CefGluePackageArchitecture);osx-$(CefGluePackageArchitecture)" />
+        </ItemGroup>
+        <MSBuild Projects="..\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Publish" BuildInParallel="false" Properties="Configuration=$(Configuration);RuntimeIdentifier=%(_CefGlueBrowserProcessRuntimeIdentifier.Identity);SelfContained=true;PublishTrimmed=true;PublishDir=$(CefGlueBrowserProcessPackageArtifactsPath)%(_CefGlueBrowserProcessRuntimeIdentifier.Identity)\;CefGluePackageArchitecture=$(CefGluePackageArchitecture)" />
+    </Target>
+
+    <Target Name="CollectBrowserProcessesForPackage" DependsOnTargets="PublishBrowserProcessesForPackage">
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="$(CefGlueBrowserProcessPackageArtifactsPath)win-$(CefGluePackageArchitecture)\**\*">
+                <PackagePath>tools\browser-process\win-$(CefGluePackageArchitecture)\%(RecursiveDir)</PackagePath>
+            </TfmSpecificPackageFile>
+            <TfmSpecificPackageFile Include="$(CefGlueBrowserProcessPackageArtifactsPath)linux-$(CefGluePackageArchitecture)\**\*">
+                <PackagePath>tools\browser-process\linux-$(CefGluePackageArchitecture)\%(RecursiveDir)</PackagePath>
+            </TfmSpecificPackageFile>
+            <TfmSpecificPackageFile Include="$(CefGlueBrowserProcessPackageArtifactsPath)osx-$(CefGluePackageArchitecture)\**\*">
+                <PackagePath>tools\browser-process\osx-$(CefGluePackageArchitecture)\%(RecursiveDir)</PackagePath>
+            </TfmSpecificPackageFile>
+        </ItemGroup>
+        <Error Condition="'@(TfmSpecificPackageFile)' == ''" Text="No CefGlue browser process files were produced for package architecture '$(CefGluePackageArchitecture)'." />
+    </Target>
+
+</Project>

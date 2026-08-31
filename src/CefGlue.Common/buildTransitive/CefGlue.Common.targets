@@ -1,0 +1,73 @@
+<Project>
+    <Target Name="ValidateCefGlueRuntimeAssets" BeforeTargets="PrepareForBuild">
+        <Error Condition="'$(CefGlueTargetRuntimeIdentifier)' != 'win-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'win-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-arm64'" Text="CefGlue supports win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64; resolved '$(CefGlueTargetRuntimeIdentifier)'. Set RuntimeIdentifier explicitly when cross-compiling." />
+        <Error Condition="'$(CefGlueRuntimePackageArchitecture)' == 'x64' and !$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').EndsWith('-x64'))" Text="CefGlue.Common targets x64, but RuntimeIdentifier is '$(CefGlueTargetRuntimeIdentifier)'. Reference CefGlue.Common.ARM64 for an ARM64 target." />
+        <Error Condition="'$(CefGlueRuntimePackageArchitecture)' == 'arm64' and !$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').EndsWith('-arm64'))" Text="CefGlue.Common.ARM64 targets ARM64, but RuntimeIdentifier is '$(CefGlueTargetRuntimeIdentifier)'. Reference CefGlue.Common for an x64 target." />
+    </Target>
+
+    <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="$(CefGluePrepareRuntimeAssetsTargets)">
+        <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'">
+            <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSX64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64'" />
+            <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSXARM64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'" />
+            <_CefGlueMacOSBrowserProcessLibrary Include="$(OutDir)libEGL.dylib;$(OutDir)libGLESv2.dylib;$(OutDir)libvk_swiftshader.dylib" />
+            <None Include="@(_CefGlueMacOSRuntimeAsset)">
+                <Visible>false</Visible>
+                <Link>%(_CefGlueMacOSRuntimeAsset.RecursiveDir)%(_CefGlueMacOSRuntimeAsset.FileName)%(_CefGlueMacOSRuntimeAsset.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+            <None Include="@(_CefGlueMacOSBrowserProcessLibrary)">
+                <Visible>false</Visible>
+                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueMacOSBrowserProcessLibrary.FileName)%(_CefGlueMacOSBrowserProcessLibrary.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+        </ItemGroup>
+
+        <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'linux-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'linux-arm64'">
+            <_CefGlueLinuxRuntimeAsset Include="@(CefRedistLinux64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'linux-x64'" />
+            <_CefGlueLinuxRuntimeAsset Include="@(CefRedistLinuxARM64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'linux-arm64'" />
+            <None Include="@(_CefGlueLinuxRuntimeAsset)">
+                <Visible>false</Visible>
+                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueLinuxRuntimeAsset.RecursiveDir)%(_CefGlueLinuxRuntimeAsset.FileName)%(_CefGlueLinuxRuntimeAsset.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+        </ItemGroup>
+
+        <ItemGroup>
+            <_CefGlueBrowserProcessAsset Include="$(CefGlueBrowserProcessAssetsPath)**\*" />
+            <None Include="@(_CefGlueBrowserProcessAsset)">
+                <Visible>false</Visible>
+                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueBrowserProcessAsset.RecursiveDir)%(_CefGlueBrowserProcessAsset.FileName)%(_CefGlueBrowserProcessAsset.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+        </ItemGroup>
+    </Target>
+
+    <Target Name="ResolveCEFAssets" Condition="$([MSBuild]::IsOSPlatform('Windows')) and ('$(CefGlueTargetRuntimeIdentifier)' == 'win-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64')" AfterTargets="ResolvePackageAssets">
+        <ItemGroup>
+            <CefRuntimeFiles Include="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.$(CefGlueTargetRuntimeIdentifier)'))" />
+            <None Include="@(CefRuntimeFiles)">
+                <Visible>false</Visible>
+                <Link>%(CefRuntimeFiles.FileName)%(CefRuntimeFiles.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+            <_CefGlueWindowsLocale Include="@(CefRuntimeWin64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-x64'" />
+            <_CefGlueWindowsLocale Include="@(CefRuntimeWinArm64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64'" />
+            <None Include="@(_CefGlueWindowsLocale)">
+                <Visible>false</Visible>
+                <Link>runtimes\$(CefGlueTargetRuntimeIdentifier)\native\locales\%(_CefGlueWindowsLocale.RecursiveDir)%(_CefGlueWindowsLocale.FileName)%(_CefGlueWindowsLocale.Extension)</Link>
+                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <PublishState>Included</PublishState>
+            </None>
+        </ItemGroup>
+    </Target>
+</Project>

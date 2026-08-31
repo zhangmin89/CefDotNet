@@ -1,1 +1,16 @@
-<Solution />
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CefGlue/CefGlue.csproj" />
+    <Project Path="src/CefGlue.Avalonia/CefGlue.Avalonia.csproj" />
+    <Project Path="src/CefGlue.BrowserProcess/CefGlue.BrowserProcess.csproj" />
+    <Project Path="src/CefGlue.Common/CefGlue.Common.csproj" />
+    <Project Path="src/CefGlue.Common.Shared/CefGlue.Common.Shared.csproj" />
+    <Project Path="src/CefGlue.Demo.Avalonia/CefGlue.Demo.Avalonia.csproj" />
+    <Project Path="src/CefGlue.Demo.WPF/CefGlue.Demo.WPF.csproj" />
+    <Project Path="src/CefGlue.WPF/CefGlue.WPF.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj" />
+    <Project Path="tests/CefGlue.Tests/CefGlue.Tests.csproj" />
+  </Folder>
+</Solution>

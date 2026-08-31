@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(DotnetVersion)</TargetFramework>
+    <AssemblyName>Xilium.CefGlue.Common.Shared</AssemblyName>
+    <RootNamespace>Xilium.CefGlue.Common.Shared</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CefGlue\CefGlue.csproj" />
+  </ItemGroup>
+
+</Project>

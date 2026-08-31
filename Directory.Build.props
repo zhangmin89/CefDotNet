@@ -3,6 +3,14 @@
     <PropertyGroup>
         <Authors>zhangmin</Authors>
 
+        <!-- CefGlue 构建配置 -->
+        <DotnetVersion>net8.0</DotnetVersion>
+        <CefRedistVersion>120.1.8</CefRedistVersion>
+        <CefRedistOSXVersion>120.1.8</CefRedistOSXVersion>
+        <CefRedistLinuxVersion>120.1.8</CefRedistLinuxVersion>
+        <Platforms>x64;ARM64</Platforms>
+        <Configurations>Debug;Debug_WindowlessRender;Release;ReleaseWPFAvalonia</Configurations>
+
         <!-- C# 配置 -->
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
@@ -12,16 +20,22 @@
         <!-- 代码质量 -->
         <!--  警告也报错-->
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-        <!-- 放过可空引用类型的警告（CS8600-CS8630系列） -->
-        <!-- 放过代码风格警告（IDE开头的） -->
-        <!-- 放过NuGet警告（NU开头的） -->
-        <WarningsNotAsErrors>
-        </WarningsNotAsErrors>
+        <!-- 保留可空分析和生成代码警告，但不将这些既有告警提升为错误 -->
+        <WarningsNotAsErrors>$(WarningsNotAsErrors);nullable;CS8981;CS0414</WarningsNotAsErrors>
         <!--  代码风格也报错-->
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 
         <!-- 构建 -->
         <Deterministic>true</Deterministic>
         <DebugType>portable</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <!-- 打包架构由 RID 或显式属性决定；Platform=ARM64 仅保留旧命令兼容性。 -->
+        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == '' and '$(RuntimeIdentifier)' != '' and $([System.String]::Copy('$(RuntimeIdentifier)').EndsWith('-arm64'))">arm64</CefGluePackageArchitecture>
+        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == '' and '$(Platform)' == 'ARM64'">arm64</CefGluePackageArchitecture>
+        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == ''">x64</CefGluePackageArchitecture>
+        <CefGluePackageSuffix Condition="'$(CefGluePackageArchitecture)' == 'arm64'">.ARM64</CefGluePackageSuffix>
+        <CefGlueArtifactsPath>$(MSBuildThisFileDirectory)artifacts\</CefGlueArtifactsPath>
     </PropertyGroup>
 </Project>

@@ -1,0 +1,10 @@
+<Project>
+    <PropertyGroup>
+        <CefGlueRuntimePackageArchitecture Condition="'$(CefGlueRuntimePackageArchitecture)' == '' and '$(MSBuildThisFileName)' == 'CefGlue.Common.ARM64'">arm64</CefGlueRuntimePackageArchitecture>
+        <CefGlueRuntimePackageArchitecture Condition="'$(CefGlueRuntimePackageArchitecture)' == ''">x64</CefGlueRuntimePackageArchitecture>
+        <CefGlueTargetRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
+        <CefGlueTargetRuntimeIdentifier Condition="'$(CefGlueTargetRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
+        <CefGlueBrowserProcessAssetsPath Condition="'$(CefGlueBrowserProcessAssetsPath)' == ''">$(MSBuildThisFileDirectory)..\tools\browser-process\$(CefGlueTargetRuntimeIdentifier)\</CefGlueBrowserProcessAssetsPath>
+        <CefGlueBrowserProcessDirectoryName>CefGlueBrowserProcess</CefGlueBrowserProcessDirectoryName>
+    </PropertyGroup>
+</Project>
