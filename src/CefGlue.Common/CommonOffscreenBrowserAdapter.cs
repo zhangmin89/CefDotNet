@@ -28,6 +28,12 @@ namespace Xilium.CefGlue.Common
 
         protected override void InnerDispose()
         {
+            DetachEventHandlers(Control);
+            DetachEventHandlers(Popup);
+            Control.ScreenInfoChanged -= HandleScreenInfoChanged;
+            Control.VisibilityChanged -= HandleVisibilityChanged;
+
+            Popup.Dispose();
             Control.RenderSurface.Dispose();
             Popup.RenderSurface.Dispose();
         }
@@ -99,7 +105,7 @@ namespace Xilium.CefGlue.Common
         {
             var _handled = false;
 
-            WithErrorHandling(nameof(HandleMouseWheel), () =>
+            WithErrorHandling(nameof(HandleTextInput), () =>
             {
                 if (BrowserHost != null)
                 {
@@ -193,22 +199,31 @@ namespace Xilium.CefGlue.Common
                         // workaround cef OSR bug (https://bitbucket.org/chromiumembedded/cef/issues/2483/osr-invalidate-does-not-generate-frame)
                         // we notify browser of a resize and return height+1px on next GetViewRect call
                         // then restore the original size back again
-                        ActionTask.Run(async () =>
+                        ActionTask.Run(() => WithErrorHandling(nameof(HandleVisibilityChanged), () =>
                         {
-                            _getViewRectOverride = () =>
+                            if (IsDisposed)
                             {
-                                return new CefRectangle(0, 0, Width, Height + 1);
-                            };
-                            BrowserHost.WasResized();
+                                return;
+                            }
 
-                            await Task.Delay(ResizeDelay);
-
-                            if (BrowserHost != null)
+                            _getViewRectOverride = () => new CefRectangle(0, 0, Width, Height + 1);
+                            var browserHost = BrowserHost;
+                            if (browserHost == null)
                             {
                                 _getViewRectOverride = null;
-                                BrowserHost.WasResized();
+                                return;
                             }
-                        });   
+                            browserHost.WasResized();
+
+                            ActionTask.Run(() => WithErrorHandling(nameof(HandleVisibilityChanged), () =>
+                            {
+                                _getViewRectOverride = null;
+                                if (!IsDisposed)
+                                {
+                                    BrowserHost?.WasResized();
+                                }
+                            }), ResizeDelay);
+                        }));
                     }
                     else
                     {
@@ -265,6 +280,27 @@ namespace Xilium.CefGlue.Common
             control.DragOver += HandleDragOver;
             control.DragLeave += HandleDragLeave;
             control.Drop += HandleDrop;
+        }
+
+        private void DetachEventHandlers(IOffScreenControlHost control)
+        {
+            control.LostFocus -= HandleLostFocus;
+
+            control.MouseMoved -= HandleMouseMove;
+            control.MouseLeave -= HandleMouseLeave;
+            control.MouseButtonPressed -= HandleMouseButtonDown;
+            control.MouseButtonReleased -= HandleMouseButtonUp;
+            control.MouseWheelChanged -= HandleMouseWheel;
+
+            control.KeyDown -= HandleKeyPress;
+            control.KeyUp -= HandleKeyPress;
+
+            control.TextInput -= HandleTextInput;
+
+            control.DragEnter -= HandleDragEnter;
+            control.DragOver -= HandleDragOver;
+            control.DragLeave -= HandleDragLeave;
+            control.Drop -= HandleDrop;
         }
 
         protected override CommonCefClient CreateCefClient()
@@ -362,14 +398,17 @@ namespace Xilium.CefGlue.Common
         {
             WithErrorHandling(nameof(IOffscreenCefBrowserHost.HandlePopupShow), () =>
             {
-                if (show)
+                RunIfNotDisposed(() =>
                 {
-                    Popup.Open();
-                }
-                else
-                {
-                    Popup.Close();
-                }
+                    if (show)
+                    {
+                        Popup.Open();
+                    }
+                    else
+                    {
+                        Popup.Close();
+                    }
+                });
             });
         }
 
@@ -377,14 +416,17 @@ namespace Xilium.CefGlue.Common
         {
             WithErrorHandling(nameof(IOffscreenCefBrowserHost.HandlePopupSizeChange), () =>
             {
-                Popup.RenderSurface.Resize(rect.Width, rect.Height);
-                Popup.MoveAndResize(rect.X, rect.Y, rect.Width, rect.Height);
+                RunIfNotDisposed(() =>
+                {
+                    Popup.RenderSurface.Resize(rect.Width, rect.Height);
+                    Popup.MoveAndResize(rect.X, rect.Y, rect.Width, rect.Height);
+                });
             });
         }
 
         void IOffscreenCefBrowserHost.HandleViewPaint(IntPtr buffer, int width, int height, CefRectangle[] dirtyRects, bool isPopup)
         {
-            if (_getViewRectOverride != null)
+            if (IsDisposed || _getViewRectOverride != null)
             {
                 return;
             }
@@ -410,12 +452,42 @@ namespace Xilium.CefGlue.Common
 
         void IOffscreenCefBrowserHost.HandleStartDragging(CefBrowser browser, CefDragData dragData, CefDragOperationsMask allowedOps, int x, int y)
         {
-            WithErrorHandling(nameof(IOffscreenCefBrowserHost.HandleStartDragging), async () =>
+            _ = CompleteStartDragging(dragData, allowedOps, x, y);
+        }
+
+        private async Task CompleteStartDragging(CefDragData dragData, CefDragOperationsMask allowedOps, int x, int y)
+        {
+            const string ScopeName = nameof(IOffscreenCefBrowserHost.HandleStartDragging);
+
+            try
             {
                 var result = await Control.StartDrag(dragData, allowedOps, x, y);
-                BrowserHost.DragSourceEndedAt(x, y, result);
-                BrowserHost.DragSourceSystemDragEnded();
-            });
+                if (IsDisposed)
+                {
+                    return;
+                }
+
+                ActionTask.Run(() => WithErrorHandling(ScopeName, () =>
+                {
+                    if (IsDisposed)
+                    {
+                        return;
+                    }
+
+                    var browserHost = BrowserHost;
+                    if (browserHost == null)
+                    {
+                        return;
+                    }
+
+                    browserHost.DragSourceEndedAt(x, y, result);
+                    browserHost.DragSourceSystemDragEnded();
+                }));
+            }
+            catch (Exception ex)
+            {
+                HandleException(ScopeName, ex);
+            }
         }
 
         void IOffscreenCefBrowserHost.HandleUpdateDragCursor(CefBrowser browser, CefDragOperationsMask operation)

@@ -1,8 +1,9 @@
+using System;
 using Xilium.CefGlue.Common.Helpers;
 
 namespace Xilium.CefGlue.Common.Platform
 {
-    internal interface IOffScreenPopupHost : IOffScreenControlHost
+    internal interface IOffScreenPopupHost : IOffScreenControlHost, IDisposable
     {
         int Width { get; }
 

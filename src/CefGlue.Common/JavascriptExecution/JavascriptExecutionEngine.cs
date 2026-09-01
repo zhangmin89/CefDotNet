@@ -12,9 +12,22 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
 {
     internal class JavascriptExecutionEngine : IDisposable
     {
+        private sealed class PendingEvaluation
+        {
+            public PendingEvaluation(long frameIdentifier)
+            {
+                FrameIdentifier = frameIdentifier;
+                CompletionSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+
+            public long FrameIdentifier { get; }
+
+            public TaskCompletionSource<string> CompletionSource { get; }
+        }
+
         private static readonly AtomicIdGenerator taskIds = new AtomicIdGenerator();
 
-        private readonly ConcurrentDictionary<int, TaskCompletionSource<string>> _pendingTasks = new ConcurrentDictionary<int, TaskCompletionSource<string>>();
+        private readonly ConcurrentDictionary<int, PendingEvaluation> _pendingTasks = new ConcurrentDictionary<int, PendingEvaluation>();
 
         public JavascriptExecutionEngine(MessageDispatcher dispatcher)
         {
@@ -36,11 +49,11 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             {
                 if (message.Success)
                 {
-                    pendingTask.SetResult(message.ResultAsJson);
+                    pendingTask.CompletionSource.SetResult(message.ResultAsJson);
                 }
                 else
                 {
-                    pendingTask.SetException(new Exception(message.Exception));
+                    pendingTask.CompletionSource.SetException(new Exception(message.Exception));
                 }
             }
         }
@@ -52,6 +65,15 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
 
         private void HandleContextReleasedMessage(MessageReceivedEventArgs args)
         {
+            var frameIdentifier = args.Frame.Identifier;
+            foreach (var pendingTaskEntry in _pendingTasks.ToArray())
+            {
+                if (pendingTaskEntry.Value.FrameIdentifier == frameIdentifier && _pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
+                {
+                    pendingTask.CompletionSource.TrySetCanceled();
+                }
+            }
+
             ContextReleased?.Invoke(args.Frame);
         }
 
@@ -73,30 +95,17 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                 Line = line
             };
 
-            var messageReceiveCompletionSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var pendingEvaluation = new PendingEvaluation(frame.Identifier);
 
-            _pendingTasks.TryAdd(taskId, messageReceiveCompletionSource);
+            _pendingTasks.TryAdd(taskId, pendingEvaluation);
 
             try
             {
                 var cefMessage = message.ToCefProcessMessage();
                 frame.SendProcessMessage(CefProcessId.Renderer, cefMessage);
 
-                var evaluationTask = messageReceiveCompletionSource.Task;
-
-                if (timeout.HasValue)
-                {
-                    var tasks = Task.WhenAny(new[] {
-                        evaluationTask,
-                        Task.Delay(timeout.Value)
-                    });
-
-                    return tasks.ContinueWith(resultTask => ProcessResult<T>(evaluationTask, taskId, timedOut: resultTask.Result != evaluationTask));
-                }
-                else
-                {
-                    return evaluationTask.ContinueWith(task => ProcessResult<T>(task, taskId));
-                }
+                var evaluationTask = pendingEvaluation.CompletionSource.Task;
+                return ProcessResult<T>(evaluationTask, taskId, timeout);
             }
             catch
             {
@@ -110,38 +119,42 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             ContextCreated = null;
             ContextReleased = null;
             UncaughtException = null;
-            foreach (var task in _pendingTasks)
+            foreach (var pendingTaskEntry in _pendingTasks.ToArray())
             {
-                task.Value.TrySetCanceled();
+                if (_pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
+                {
+                    pendingTask.CompletionSource.TrySetCanceled();
+                }
             }
         }
 
-        private T ProcessResult<T>(Task<string> task, int taskId, bool timedOut = false)
+        private async Task<T> ProcessResult<T>(Task<string> task, int taskId, TimeSpan? timeout)
         {
             try
             {
-                if (timedOut)
+                if (timeout.HasValue)
                 {
-                    // task evaluation timeout
-                    throw new TaskCanceledException();
+                    var completedTask = await Task.WhenAny(task, Task.Delay(timeout.Value)).ConfigureAwait(false);
+                    if (completedTask != task)
+                    {
+                        throw new TaskCanceledException();
+                    }
                 }
 
-                if (task.IsFaulted)
+                string resultAsJson;
+                try
                 {
-                    throw task.Exception.InnerException;
+                    resultAsJson = await task.ConfigureAwait(false);
                 }
-
-                return Deserializer.Deserialize<T>(task.Result);
-            }
-            catch (Exception e)
-            {
-                _pendingTasks.TryRemove(taskId, out var _);
-
-                if (e is AggregateException && e.InnerException is TaskCanceledException)
+                catch (TaskCanceledException)
                 {
                     return default;
                 }
-                throw;
+                return Deserializer.Deserialize<T>(resultAsJson);
+            }
+            finally
+            {
+                _pendingTasks.TryRemove(taskId, out var _);
             }
         }
     }

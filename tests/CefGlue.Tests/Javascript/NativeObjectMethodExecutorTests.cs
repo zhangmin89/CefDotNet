@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using NUnit.Framework;
@@ -36,6 +37,16 @@ namespace CefGlue.Tests.Javascript
             public Task<string> AsyncMethodWithReturn()
             {
                 return Task.FromResult("this is the result");
+            }
+
+            public Task FaultedAsyncMethod()
+            {
+                return Task.FromException(new InvalidOperationException("async failure"));
+            }
+
+            public Task CanceledAsyncMethod()
+            {
+                return Task.FromCanceled(new CancellationToken(true));
             }
 
             public object[] MethodWithOptionalParams(params string[] optionalParams)
@@ -112,6 +123,20 @@ namespace CefGlue.Tests.Javascript
         {
             var result = ExecuteAsyncMethod("asyncMethodWithReturn", new object[0]);
             Assert.AreEqual(nativeTestObject.AsyncMethodWithReturn().Result, result.Result);
+        }
+
+        [Test]
+        public void AsyncMethodPreservesOriginalException()
+        {
+            var exception = Assert.ThrowsAsync<InvalidOperationException>(async () => await ExecuteAsyncMethod("faultedAsyncMethod", new object[0]));
+
+            Assert.AreEqual("async failure", exception.Message);
+        }
+
+        [Test]
+        public void AsyncMethodReportsCancellation()
+        {
+            Assert.ThrowsAsync<TaskCanceledException>(async () => await ExecuteAsyncMethod("canceledAsyncMethod", new object[0]));
         }
 
         [Test]

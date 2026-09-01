@@ -13,11 +13,20 @@ namespace Xilium.CefGlue.Common
     {
         private const string DefaultBrowserProcessDirectory = "CefGlueBrowserProcess";
 
+        private static readonly object InitializationLock = new object();
         private static Action<BrowserProcessHandler> _delayedInitialization;
 
         public static void Initialize(CefSettings settings = null, KeyValuePair<string, string>[] flags = null, CustomScheme[] customSchemes = null)
         {
-            _delayedInitialization = (browserProcessHandler) => InternalInitialize(settings, flags, customSchemes, browserProcessHandler);
+            lock (InitializationLock)
+            {
+                if (IsLoaded)
+                {
+                    throw new InvalidOperationException("CEF has already been initialized.");
+                }
+
+                _delayedInitialization = (browserProcessHandler) => InternalInitialize(settings, flags, customSchemes, browserProcessHandler);
+            }
         }
 
         private static void InternalInitialize(CefSettings settings = null, KeyValuePair<string, string>[] flags = null, CustomScheme[] customSchemes = null, BrowserProcessHandler browserProcessHandler = null)
@@ -66,8 +75,6 @@ namespace Xilium.CefGlue.Common
                     break;
             }
 
-            AppDomain.CurrentDomain.ProcessExit += delegate { CefRuntime.Shutdown(); };
-
             IsOSREnabled = settings.WindowlessRenderingEnabled;
 
             // On Linux, with osr disable, the filename in CefMainArgs will be used as accessible name.
@@ -113,14 +120,22 @@ namespace Xilium.CefGlue.Common
 
         internal static void Load(BrowserProcessHandler browserProcessHandler = null)
         {
-            if (_delayedInitialization != null)
+            lock (InitializationLock)
             {
-                _delayedInitialization.Invoke(browserProcessHandler);
-                _delayedInitialization = null;
-            }
-            else
-            {
-                InternalInitialize(browserProcessHandler: browserProcessHandler);
+                if (IsLoaded)
+                {
+                    return;
+                }
+
+                if (_delayedInitialization != null)
+                {
+                    _delayedInitialization.Invoke(browserProcessHandler);
+                    _delayedInitialization = null;
+                }
+                else
+                {
+                    InternalInitialize(browserProcessHandler: browserProcessHandler);
+                }
             }
         }
 

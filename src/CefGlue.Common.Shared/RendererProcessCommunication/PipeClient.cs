@@ -9,8 +9,17 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
 
         public PipeClient(string pipeName)
         {
-            _pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.None);
-            _pipe.Connect((int) TimeSpan.FromSeconds(10).TotalMilliseconds);
+            var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.None);
+            try
+            {
+                pipe.Connect((int) TimeSpan.FromSeconds(10).TotalMilliseconds);
+                _pipe = pipe;
+            }
+            catch
+            {
+                pipe.Dispose();
+                throw;
+            }
         }
 
         public void SendMessage(string message)

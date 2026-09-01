@@ -65,6 +65,7 @@ namespace Xilium.CefGlue.WPF.Platform
                 new Action(() =>
                 {
                     var menu = new ContextMenu();
+                    var commandSelected = false;
 
                     foreach (var menuEntry in menuEntries)
                     {
@@ -82,13 +83,25 @@ namespace Xilium.CefGlue.WPF.Platform
                                 IsCheckable = menuEntry.IsChecked != null,
                             };
                             var commandId = menuEntry.CommandId;
-                            menuItem.Click += delegate { callback.Continue(commandId, CefEventFlags.None); };
+                            menuItem.Click += delegate
+                            {
+                                if (commandSelected)
+                                {
+                                    return;
+                                }
+
+                                commandSelected = true;
+                                callback.Continue(commandId, CefEventFlags.None);
+                            };
                             menu.Items.Add(menuItem);
                         }
                     }
 
                     menu.Closed += delegate {
-                        callback.Cancel();
+                        if (!commandSelected)
+                        {
+                            callback.Cancel();
+                        }
                         _control.ContextMenu = null;
                     };
 
@@ -108,7 +121,15 @@ namespace Xilium.CefGlue.WPF.Platform
                 DispatcherPriority.Input,
                 new Action(() =>
                 {
-                    _control.ContextMenu = null;
+                    var menu = _control.ContextMenu;
+                    if (menu != null)
+                    {
+                        menu.IsOpen = false;
+                    }
+                    else
+                    {
+                        _control.ContextMenu = null;
+                    }
                 })
             );
         }

@@ -12,6 +12,9 @@ namespace Xilium.CefGlue.WPF.Platform
     /// </summary>
     internal class WpfPopup : WpfOffScreenControlHost, IOffScreenPopupHost
     {
+        private readonly object _lifecycleLock = new object();
+        private bool _disposed;
+
         public WpfPopup(Popup popup) : base(popup)
         {
         }
@@ -30,14 +33,27 @@ namespace Xilium.CefGlue.WPF.Platform
 
         public void MoveAndResize(int x, int y, int width, int height)
         {
+            if (IsDisposed)
+            {
+                return;
+            }
+
             Popup.Dispatcher.BeginInvoke(
                 DispatcherPriority.Normal, 
                 new Action(() =>
                 {
-                    Popup.HorizontalOffset = x;
-                    Popup.VerticalOffset = y;
-                    Popup.Width = width;
-                    Popup.Height = height;
+                    lock (_lifecycleLock)
+                    {
+                        if (_disposed)
+                        {
+                            return;
+                        }
+
+                        Popup.HorizontalOffset = x;
+                        Popup.VerticalOffset = y;
+                        Popup.Width = width;
+                        Popup.Height = height;
+                    }
                 }));
         }
 
@@ -53,12 +69,51 @@ namespace Xilium.CefGlue.WPF.Platform
 
         private void SetIsOpen(bool isOpen)
         {
+            if (IsDisposed)
+            {
+                return;
+            }
+
             Popup.Dispatcher.BeginInvoke(
                 DispatcherPriority.Normal,
                 new Action(() =>
                 {
-                    Popup.IsOpen = isOpen;
+                    lock (_lifecycleLock)
+                    {
+                        if (_disposed)
+                        {
+                            return;
+                        }
+
+                        Popup.IsOpen = isOpen;
+                    }
                 }));
+        }
+
+        public void Dispose()
+        {
+            lock (_lifecycleLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+            }
+
+            Popup.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(() => Popup.IsOpen = false));
+        }
+
+        private bool IsDisposed
+        {
+            get
+            {
+                lock (_lifecycleLock)
+                {
+                    return _disposed;
+                }
+            }
         }
 
         protected override void SetContent(Image image)

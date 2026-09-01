@@ -16,9 +16,14 @@ namespace Xilium.CefGlue.Common.ObjectBinding
 
         public static (object Result, Exception Exception) GetResultFrom(Task task)
         {
+            if (task.IsCanceled)
+            {
+                return (default, new TaskCanceledException(task));
+            }
+
             if (task.IsFaulted)
             {
-                return (default, task.Exception);
+                return (default, task.Exception.GetBaseException());
             }
            
             try

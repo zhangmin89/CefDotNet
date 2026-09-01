@@ -9,7 +9,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
 {
     internal static class Deserializer
     {
-        private const int DeserializerMaxDepth = int.MaxValue;
+        private const int DeserializerMaxDepth = 512;
 
         private static readonly IDeserializerState ListWrapperMarker = new ReadonlyDeserializerState(value: default);
 

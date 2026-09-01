@@ -31,7 +31,8 @@ namespace Xilium.CefGlue.Common
 
         private readonly NativeObjectRegistry _objectRegistry = new NativeObjectRegistry();
 
-        private object _disposeLock = new object();
+        private readonly object _disposeLock = new object();
+        private bool _disposed;
 
         public CommonBrowserAdapter(object eventsEmitter, string name, IControl control, ILogger logger, CefRequestContext cefRequestContext = null)
         {
@@ -63,20 +64,14 @@ namespace Xilium.CefGlue.Common
 
         public void Dispose(bool disposing)
         {
-            var disposeLock = _disposeLock;
-            if (disposeLock == null)
+            lock (_disposeLock)
             {
-                return; // already disposed
-            }
-
-            lock (disposeLock)
-            {
-                if (_disposeLock == null)
+                if (_disposed)
                 {
                     return; // already disposed
                 }
 
-                _disposeLock = null;
+                _disposed = true;
             }
 
             if (_logger.IsInfoEnabled)
@@ -84,13 +79,16 @@ namespace Xilium.CefGlue.Common
                 _logger.Info($"Browser adapter disposed (Id:{GetHashCode()}");
             }
 
-            var browserHost = BrowserHost;
-            if (browserHost != null)
+            if (disposing)
             {
-                if (disposing)
-                {
-                    browserHost.CloseBrowser(true);
-                }
+                Control.GotFocus -= HandleGotFocus;
+                Control.SizeChanged -= HandleControlSizeChanged;
+            }
+
+            var browserHost = BrowserHost;
+            if (disposing && browserHost != null)
+            {
+                browserHost.CloseBrowser(true);
             }
 
             if (disposing)
@@ -144,6 +142,28 @@ namespace Xilium.CefGlue.Common
         protected virtual IControl Control { get; }
 
         protected CefBrowserHost BrowserHost { get; private set; }
+
+        protected bool IsDisposed
+        {
+            get
+            {
+                lock (_disposeLock)
+                {
+                    return _disposed;
+                }
+            }
+        }
+
+        protected void RunIfNotDisposed(Action action)
+        {
+            lock (_disposeLock)
+            {
+                if (!_disposed)
+                {
+                    action();
+                }
+            }
+        }
 
         protected bool IsBrowserCreated { get; private set; }
 
@@ -291,37 +311,40 @@ namespace Xilium.CefGlue.Common
 
         public bool CreateBrowser(int width, int height)
         {
-            if (IsBrowserCreated || width < 0 || height < 0)
+            lock (_disposeLock)
             {
-                return false;
+                if (_disposed || IsBrowserCreated || width < 0 || height < 0)
+                {
+                    return false;
+                }
+
+                var hostViewHandle = Control.GetHostViewHandle(width, height);
+                if (hostViewHandle == null)
+                {
+                    return false;
+                }
+
+                IsBrowserCreated = true;
+
+                var windowInfo = CefWindowInfo.Create();
+                SetupBrowserView(windowInfo, width, height, hostViewHandle.Value);
+
+                var cefClient = CreateCefClient();
+                cefClient.Dispatcher.RegisterMessageHandler(Messages.UnhandledException.Name, OnBrowserProcessUnhandledException);
+                _cefClient = cefClient;
+
+                using (var extraInfo = CefDictionaryValue.Create())
+                {
+                    // send the name of the crash (side) pipe to the render process
+                    _crashServerPipeName = Guid.NewGuid().ToString();
+                    extraInfo.SetString(Constants.CrashPipeNameKey, _crashServerPipeName);
+
+                    // This is the first time the window is being rendered, so create it.
+                    CefBrowserHost.CreateBrowser(windowInfo, cefClient, Settings, "", extraInfo, RequestContext);
+                }
+
+                return true;
             }
-
-            var hostViewHandle = Control.GetHostViewHandle(width, height);
-            if (hostViewHandle == null)
-            {
-                return false;
-            }
-
-            IsBrowserCreated = true;
-
-            var windowInfo = CefWindowInfo.Create();
-            SetupBrowserView(windowInfo, width, height, hostViewHandle.Value);
-
-            var cefClient = CreateCefClient();
-            cefClient.Dispatcher.RegisterMessageHandler(Messages.UnhandledException.Name, OnBrowserProcessUnhandledException);
-            _cefClient = cefClient;
-
-            using (var extraInfo = CefDictionaryValue.Create())
-            {
-                // send the name of the crash (side) pipe to the render process
-                _crashServerPipeName = Guid.NewGuid().ToString();
-                extraInfo.SetString(Constants.CrashPipeNameKey, _crashServerPipeName);
-
-                // This is the first time the window is being rendered, so create it.
-                CefBrowserHost.CreateBrowser(windowInfo, cefClient, Settings, "", extraInfo, RequestContext);
-            }
-
-            return true;
         }
 
         public bool CanZoom(CefZoomCommand command)
@@ -387,8 +410,21 @@ namespace Xilium.CefGlue.Common
 
         protected void HandleException(string scopeName, Exception exception)
         {
-            _logger.ErrorException($"{_name} : Caught exception in {scopeName}()", exception);
-            UnhandledException?.Invoke(_eventsEmitter, new AsyncUnhandledExceptionEventArgs(exception));
+            try
+            {
+                _logger.ErrorException($"{_name} : Caught exception in {scopeName}()", exception);
+            }
+            catch (Exception)
+            {
+            }
+
+            try
+            {
+                UnhandledException?.Invoke(_eventsEmitter, new AsyncUnhandledExceptionEventArgs(exception));
+            }
+            catch (Exception)
+            {
+            }
         }
 
         protected virtual void HandleGotFocus()
@@ -434,44 +470,58 @@ namespace Xilium.CefGlue.Common
 
         private void OnBrowserCreated(CefBrowser browser)
         {
-            if (_browser != null)
+            if (browser.IsPopup)
             {
-                // Make sure we don't initialize ourselves more than once. That seems to break things.
                 return;
             }
 
-            WithErrorHandling((nameof(OnBrowserCreated)), () =>
+            lock (_disposeLock)
             {
-                _browser = browser;
-                _crashServerPipe = new PipeServer(_crashServerPipeName);
-                _crashServerPipe.MessageReceived += OnChildProcessCrashed;
-
-                var browserHost = browser.GetHost();
-                BrowserHost = browserHost;
-
-                var dispatcher = _cefClient?.Dispatcher;
-                if (dispatcher != null)
+                if (_disposed)
                 {
-                    var javascriptExecutionEngine = new JavascriptExecutionEngine(dispatcher);
-                    javascriptExecutionEngine.ContextCreated += HandleJavascriptExecutionEngineContextCreated;
-                    javascriptExecutionEngine.ContextReleased += HandleJavascriptExecutionEngineContextReleased;
-                    javascriptExecutionEngine.UncaughtException += OnJavascriptExecutionEngineUncaughtException;
-                    _javascriptExecutionEngine = javascriptExecutionEngine;
-
-                    _objectRegistry.SetBrowser(browser);
-                    _objectMethodDispatcher = new NativeObjectMethodDispatcher(dispatcher, _objectRegistry);
+                    browser.GetHost()?.CloseBrowser(true);
+                    return;
                 }
 
-                OnBrowserHostCreated(browserHost);
-
-                if (!string.IsNullOrEmpty(_initialUrl))
+                if (_browser != null)
                 {
-                    _browser?.GetMainFrame()?.LoadUrl(_initialUrl);
-                    _initialUrl = "";
+                    // Make sure we don't initialize ourselves more than once. That seems to break things.
+                    return;
                 }
 
-                Initialized?.Invoke();
-            });
+                WithErrorHandling((nameof(OnBrowserCreated)), () =>
+                {
+                    _browser = browser;
+                    _crashServerPipe = new PipeServer(_crashServerPipeName);
+                    _crashServerPipe.MessageReceived += OnChildProcessCrashed;
+
+                    var browserHost = browser.GetHost();
+                    BrowserHost = browserHost;
+
+                    var dispatcher = _cefClient?.Dispatcher;
+                    if (dispatcher != null)
+                    {
+                        var javascriptExecutionEngine = new JavascriptExecutionEngine(dispatcher);
+                        javascriptExecutionEngine.ContextCreated += HandleJavascriptExecutionEngineContextCreated;
+                        javascriptExecutionEngine.ContextReleased += HandleJavascriptExecutionEngineContextReleased;
+                        javascriptExecutionEngine.UncaughtException += OnJavascriptExecutionEngineUncaughtException;
+                        _javascriptExecutionEngine = javascriptExecutionEngine;
+
+                        _objectRegistry.SetBrowser(browser);
+                        _objectMethodDispatcher = new NativeObjectMethodDispatcher(dispatcher, _objectRegistry);
+                    }
+
+                    OnBrowserHostCreated(browserHost);
+
+                    if (!string.IsNullOrEmpty(_initialUrl))
+                    {
+                        _browser?.GetMainFrame()?.LoadUrl(_initialUrl);
+                        _initialUrl = "";
+                    }
+
+                    Initialized?.Invoke();
+                });
+            }
         }
 
         protected virtual void OnBrowserHostCreated(CefBrowserHost browserHost)
@@ -505,7 +555,7 @@ namespace Xilium.CefGlue.Common
 
             browser.Dispose();
 
-            _javascriptExecutionEngine.Dispose();
+            _javascriptExecutionEngine?.Dispose();
             _objectRegistry.Dispose();
 
             BrowserHost = null;
@@ -517,7 +567,7 @@ namespace Xilium.CefGlue.Common
 
         void ICefBrowserHost.HandleBrowserCreated(CefBrowser browser)
         {
-            WithErrorHandling((nameof(ICefBrowserHost.HandleBrowserDestroyed)), () =>
+            WithErrorHandling((nameof(ICefBrowserHost.HandleBrowserCreated)), () =>
             {
                 OnBrowserCreated(browser);
             });

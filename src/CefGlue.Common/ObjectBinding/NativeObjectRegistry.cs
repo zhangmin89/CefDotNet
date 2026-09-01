@@ -20,21 +20,14 @@ namespace Xilium.CefGlue.Common.ObjectBinding
         /// <returns>True if the object was successfully registered, false if the object was already registered before.</returns>
         public bool Register(object obj, string name, MethodCallHandler methodHandler = null)
         {
-            if (_registeredObjects.ContainsKey(name))
-            {
-                return false;
-            }
-            
-            var nativeObj = new NativeObject(name, obj, methodHandler);
-
             lock (_registrationSyncRoot)
             {
                 if (_registeredObjects.ContainsKey(name))
                 {
-                    // check gain, might have been registered meanwhile
                     return false;
                 }
 
+                var nativeObj = new NativeObject(name, obj, methodHandler);
                 _registeredObjects.Add(name, nativeObj);
                 
                 if (_browser != null)
@@ -80,8 +73,11 @@ namespace Xilium.CefGlue.Common.ObjectBinding
 
         public NativeObject Get(string name)
         {
-            _registeredObjects.TryGetValue(name, out var obj);
-            return obj;
+            lock (_registrationSyncRoot)
+            {
+                _registeredObjects.TryGetValue(name, out var obj);
+                return obj;
+            }
         }
 
         private void SendRegistrationMessage(NativeObject obj)
@@ -102,9 +98,8 @@ namespace Xilium.CefGlue.Common.ObjectBinding
             lock (_registrationSyncRoot)
             {
                 _registeredObjects.Clear();
+                _browser = null;
             }
-
-            _browser = null;
         }
     }
 }

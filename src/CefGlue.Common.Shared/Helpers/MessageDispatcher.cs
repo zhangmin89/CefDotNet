@@ -1,11 +1,11 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace Xilium.CefGlue.Common.Shared.Helpers
 {
     internal class MessageDispatcher
     {
-        private readonly Dictionary<string, Action<MessageReceivedEventArgs>> _messageHandlers = new Dictionary<string, Action<MessageReceivedEventArgs>>();
+        private readonly ConcurrentDictionary<string, Action<MessageReceivedEventArgs>> _messageHandlers = new ConcurrentDictionary<string, Action<MessageReceivedEventArgs>>();
 
         public void DispatchMessage(CefBrowser browser, CefFrame frame, CefProcessId sourceProcess, CefProcessMessage message)
         {
@@ -17,8 +17,7 @@ namespace Xilium.CefGlue.Common.Shared.Helpers
 
         public void RegisterMessageHandler(string messageName, Action<MessageReceivedEventArgs> handler)
         {
-            _messageHandlers.TryGetValue(messageName, out var existingHandler);
-            _messageHandlers[messageName] = existingHandler + handler;
+            _messageHandlers.AddOrUpdate(messageName, handler, (_, existingHandler) => existingHandler + handler);
         }
     }
 }

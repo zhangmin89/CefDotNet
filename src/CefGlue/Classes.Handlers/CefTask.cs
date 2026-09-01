@@ -2,6 +2,7 @@
 {
     using System;
     using System.Collections.Generic;
+    using System.Diagnostics;
     using Xilium.CefGlue.Interop;
 
     /// <summary>
@@ -16,9 +17,21 @@
     {
         private void execute(cef_task_t* self)
         {
-            CheckSelf(self);
-
-            Execute();
+            try
+            {
+                CheckSelf(self);
+                Execute();
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    Trace.TraceError("Unhandled exception in CefTask.Execute(): {0}", ex);
+                }
+                catch (Exception)
+                {
+                }
+            }
         }
 
         /// <summary>

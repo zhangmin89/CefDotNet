@@ -12,9 +12,11 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
         private static readonly AtomicIdGenerator callIds = new AtomicIdGenerator();
 
         private readonly object _registrationSyncRoot = new object();
+        private readonly object _pendingBoundPromiseSyncRoot = new object();
         private readonly Dictionary<string, ObjectRegistrationInfo> _registeredObjects = new Dictionary<string, ObjectRegistrationInfo>();
         private readonly ConcurrentDictionary<int, PromiseHolder> _pendingCalls = new ConcurrentDictionary<int, PromiseHolder>();
         private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingBoundQueryTasks = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
+        private readonly Dictionary<PromiseHolder, byte> _pendingBoundPromises = new Dictionary<PromiseHolder, byte>();
         
         public JavascriptToNativeDispatcherRenderSide(MessageDispatcher dispatcher)
         {
@@ -38,7 +40,7 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                 }
 
                 _registeredObjects.Add(objectInfo.Name, objectInfo);
-                var taskSource = _pendingBoundQueryTasks.GetOrAdd(objectInfo.Name, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+                _pendingBoundQueryTasks.GetOrAdd(objectInfo.Name, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
 
                 // register objects in the main frame
                 var frame = args.Browser.GetMainFrame();
@@ -50,27 +52,28 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                     return;
                 }
 
-                var objectCreated = CreateNativeObjects(new[] { objectInfo }, context);
-
-                if (!objectCreated)
-                {
-                    taskSource.TrySetException(new Exception("Failed to create native object"));
-                    return;
-                }
-
-                // notify that the object has been registered, any pending promises on the object will be resolved
-                taskSource.TrySetResult(true);
+                CreateNativeObjectsAndCompletePendingQueries(new[] { objectInfo }, context);
             }
         }
 
         private void HandleNativeObjectUnregistration(MessageReceivedEventArgs args)
         {
             var message = Messages.NativeObjectUnregistrationRequest.FromCefMessage(args.Message);
+            if (!RemoveNativeObjectRegistration(message.ObjectName))
+            {
+                return;
+            }
 
             var frame = args.Browser.GetMainFrame(); // unregister objects from the main frame
-            using (var context = frame.V8Context.EnterOrFail())
+            var v8Context = frame?.V8Context;
+            if (v8Context == null)
             {
-                DeleteNativeObject(message.ObjectName, context.V8Context);
+                return;
+            }
+
+            using (var context = v8Context.EnterOrFail())
+            {
+                DeleteNativeObjectValue(message.ObjectName, context.V8Context);
             }
         }
 
@@ -94,7 +97,18 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                 }
 
                 var cefMessage = message.ToCefProcessMessage();
-                frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
+                try
+                {
+                    frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
+                }
+                catch
+                {
+                    if (_pendingCalls.TryRemove(message.CallId, out var pendingCall))
+                    {
+                        ReleasePromiseHolder(pendingCall);
+                    }
+                    throw;
+                }
 
                 return promiseHolder;
             }
@@ -131,37 +145,178 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             {
                 lock (_registrationSyncRoot)
                 {
-                    CreateNativeObjects(_registeredObjects.Values, context);
+                    CreateNativeObjectsAndCompletePendingQueries(_registeredObjects.Values, context);
                 }
             }
         }
 
-        public void HandleContextReleased(CefV8Context context, bool isMain)
+        public void HandleContextReleased(CefV8Context context)
         {
-            void ReleasePromiseHolder(PromiseHolder promiseHolder)
-            {
-                promiseHolder.Context.Dispose();
-                promiseHolder.Dispose();
-            }
+            ReleasePendingCalls(promiseHolder => promiseHolder.Context.IsSame(context));
+            ReleasePendingBoundPromises(promiseHolder => promiseHolder.Context.IsSame(context));
+        }
 
-            if (isMain)
+        public void HandleBrowserDestroyed(CefBrowser browser)
+        {
+            ReleasePendingCalls(promiseHolder => promiseHolder.Browser?.IsSame(browser) == true);
+            ReleasePendingBoundPromises(promiseHolder => promiseHolder.Browser?.IsSame(browser) == true);
+        }
+
+        private void ReleasePendingCalls(Func<PromiseHolder, bool> shallRelease)
+        {
+            foreach (var promiseHolderEntry in _pendingCalls.ToArray())
             {
-                foreach (var promiseHolder in _pendingCalls.Values)
+                if (shallRelease(promiseHolderEntry.Value) && _pendingCalls.TryRemove(promiseHolderEntry.Key, out var promiseHolder))
                 {
                     ReleasePromiseHolder(promiseHolder);
                 }
-                _pendingCalls.Clear();
             }
-            else
+        }
+
+        private static void ReleasePromiseHolder(PromiseHolder promiseHolder)
+        {
+            try
             {
-                foreach (var promiseHolderEntry in _pendingCalls.ToArray())
+                promiseHolder.Context.Dispose();
+            }
+            finally
+            {
+                promiseHolder.Dispose();
+            }
+        }
+
+        private void ReleasePendingBoundPromises(Func<PromiseHolder, bool> shallRelease)
+        {
+            lock (_pendingBoundPromiseSyncRoot)
+            {
+                foreach (var promiseHolder in new List<PromiseHolder>(_pendingBoundPromises.Keys))
                 {
-                    if (promiseHolderEntry.Value.Context.IsSame(context))
+                    if (shallRelease(promiseHolder) && _pendingBoundPromises.Remove(promiseHolder))
                     {
-                        _pendingCalls.TryRemove(promiseHolderEntry.Key, out var dummy);
-                        ReleasePromiseHolder(promiseHolderEntry.Value);
+                        ReleasePromiseHolder(promiseHolder);
                     }
                 }
+            }
+        }
+
+        private void SchedulePendingBoundPromiseCompletion(PromiseHolder promiseHolder, Task<bool> boundQueryTask)
+        {
+            lock (_pendingBoundPromiseSyncRoot)
+            {
+                if (!_pendingBoundPromises.ContainsKey(promiseHolder))
+                {
+                    return;
+                }
+
+                try
+                {
+                    using (var taskRunner = promiseHolder.Context.GetTaskRunner())
+                    {
+                        if (!taskRunner.PostTask(new ActionTask(() => CompletePendingBoundPromise(promiseHolder, boundQueryTask))))
+                        {
+                            _pendingBoundPromises.Remove(promiseHolder);
+                            ReleasePromiseHolder(promiseHolder);
+                        }
+                    }
+                }
+                catch
+                {
+                    if (_pendingBoundPromises.Remove(promiseHolder))
+                    {
+                        ReleasePromiseHolder(promiseHolder);
+                    }
+                }
+            }
+        }
+
+        private void CompletePendingBoundPromise(PromiseHolder promiseHolder, Task<bool> boundQueryTask)
+        {
+            lock (_pendingBoundPromiseSyncRoot)
+            {
+                if (!_pendingBoundPromises.Remove(promiseHolder))
+                {
+                    return;
+                }
+            }
+
+            try
+            {
+                using (CefObjectTracker.StartTracking())
+                {
+                    var context = promiseHolder.Context;
+                    if (!context.Enter())
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        promiseHolder.ResolveOrReject((resolve, reject) =>
+                        {
+                            if (boundQueryTask.IsCanceled)
+                            {
+                                reject(CefV8Value.CreateString(new TaskCanceledException(boundQueryTask).Message));
+                            }
+                            else if (boundQueryTask.IsFaulted)
+                            {
+                                reject(CefV8Value.CreateString(boundQueryTask.Exception.GetBaseException().Message));
+                            }
+                            else
+                            {
+                                resolve(CefV8Value.CreateBool(boundQueryTask.Result));
+                            }
+                        });
+                    }
+                    finally
+                    {
+                        context.Exit();
+                    }
+                }
+            }
+            finally
+            {
+                ReleasePromiseHolder(promiseHolder);
+            }
+        }
+
+        private bool CreateNativeObjectsAndCompletePendingQueries(IEnumerable<ObjectRegistrationInfo> objectInfos, CefV8Context context)
+        {
+            try
+            {
+                if (!CreateNativeObjects(objectInfos, context))
+                {
+                    var exception = new Exception("Failed to create native object");
+                    foreach (var objectInfo in objectInfos)
+                    {
+                        CompletePendingBoundQueryWithException(objectInfo.Name, exception);
+                    }
+                    return false;
+                }
+
+                foreach (var objectInfo in objectInfos)
+                {
+                    if (_pendingBoundQueryTasks.TryGetValue(objectInfo.Name, out var taskSource))
+                    {
+                        taskSource.TrySetResult(true);
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                foreach (var objectInfo in objectInfos)
+                {
+                    CompletePendingBoundQueryWithException(objectInfo.Name, ex);
+                }
+                throw;
+            }
+        }
+
+        private void CompletePendingBoundQueryWithException(string objectName, Exception exception)
+        {
+            if (_pendingBoundQueryTasks.TryGetValue(objectName, out var taskSource))
+            {
+                taskSource.TrySetException(exception);
             }
         }
 
@@ -203,28 +358,49 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             }
         }
 
-        private void DeleteNativeObject(string objName, CefV8Context context)
+        private bool RemoveNativeObjectRegistration(string objName)
         {
             lock (_registrationSyncRoot)
             {
-                if (_registeredObjects.Remove(objName))
+                var objectRemoved = _registeredObjects.Remove(objName);
+                if (_pendingBoundQueryTasks.TryRemove(objName, out var taskSource))
                 {
-                    var global = context.GetGlobal();
-                    global.DeleteValue(objName);
+                    taskSource.TrySetResult(false);
                 }
+
+                return objectRemoved;
             }
         }
 
-        Task<bool> INativeObjectRegistry.Bind(string objName)
+        private static void DeleteNativeObjectValue(string objName, CefV8Context context)
         {
-            return _pendingBoundQueryTasks.GetOrAdd(objName, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            var global = context.GetGlobal();
+            global.DeleteValue(objName);
+        }
+
+        PromiseHolder INativeObjectRegistry.Bind(string objName, CefV8Context context)
+        {
+            var promiseHolder = context.CreatePromise();
+            lock (_pendingBoundPromiseSyncRoot)
+            {
+                _pendingBoundPromises.Add(promiseHolder, 0);
+            }
+
+            var boundQueryTask = _pendingBoundQueryTasks.GetOrAdd(objName, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            _ = boundQueryTask.ContinueWith(task => SchedulePendingBoundPromiseCompletion(promiseHolder, task), TaskScheduler.Default);
+            return promiseHolder;
         }
 
         void INativeObjectRegistry.Unbind(string objName)
         {
+            if (!RemoveNativeObjectRegistration(objName))
+            {
+                return;
+            }
+
             using (var context = CefV8Context.GetCurrentContext().EnterOrFail())
             {
-                DeleteNativeObject(objName, context.V8Context);
+                DeleteNativeObjectValue(objName, context.V8Context);
             }
         }
     }

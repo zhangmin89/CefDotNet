@@ -64,8 +64,9 @@
             <_CefGlueWindowsLocale Include="@(CefRuntimeWinArm64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64'" />
             <None Include="@(_CefGlueWindowsLocale)">
                 <Visible>false</Visible>
-                <Link>runtimes\$(CefGlueTargetRuntimeIdentifier)\native\locales\%(_CefGlueWindowsLocale.RecursiveDir)%(_CefGlueWindowsLocale.FileName)%(_CefGlueWindowsLocale.Extension)</Link>
+                <Link>locales\%(_CefGlueWindowsLocale.RecursiveDir)%(_CefGlueWindowsLocale.FileName)%(_CefGlueWindowsLocale.Extension)</Link>
                 <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
         </ItemGroup>

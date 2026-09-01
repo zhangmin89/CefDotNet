@@ -93,6 +93,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
                 () =>
                 {
                     var menu = new ContextMenu();
+                    var commandSelected = false;
 
                     menu.Items.Clear();
 
@@ -113,14 +114,26 @@ namespace Xilium.CefGlue.Avalonia.Platform
                                 //IsCheckable = menuEntry.IsChecked != null,
                             };
                             var commandId = menuEntry.CommandId;
-                            menuItem.Click += delegate { callback.Continue(commandId, CefEventFlags.None); };
+                            menuItem.Click += delegate
+                            {
+                                if (commandSelected)
+                                {
+                                    return;
+                                }
+
+                                commandSelected = true;
+                                callback.Continue(commandId, CefEventFlags.None);
+                            };
                             menu.Items.Add(menuItem);
                         }
                     }
 
                     menu.Closed += delegate
                     {
-                        callback.Cancel();
+                        if (!commandSelected)
+                        {
+                            callback.Cancel();
+                        }
                         _control.ContextMenu = null;
                     };
 

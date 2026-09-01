@@ -9,50 +9,83 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
     internal class PipeServer : IDisposable
     {
         private const int MaxErrorsAllowed = 5;
+        private static readonly TimeSpan ClientReadTimeout = TimeSpan.FromSeconds(10);
 
-        private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+        private readonly CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+        private int _disposed;
 
         public event Action<string> MessageReceived;
 
         public PipeServer(string pipeName)
         {
-            Task.Run(async () =>
-            {
-                var errorCount = 0;
-                while (!_cancellationTokenSource.IsCancellationRequested)
-                {
-                    try
-                    {
-                        using (var serverPipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
-                        {
-                            await serverPipe.WaitForConnectionAsync(_cancellationTokenSource.Token);
-                            HandleClientConnected(serverPipe);
-                        }
-                    }
-                    catch
-                    {
-                        errorCount++;
-                        if (errorCount > MaxErrorsAllowed)
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                var cancellationTokenSource = _cancellationTokenSource;
-                _cancellationTokenSource = null;
-                cancellationTokenSource.Dispose();
-            });
+            var cancellationToken = _cancellationTokenSource.Token;
+            _ = Task.Run(() => ListenAsync(pipeName, cancellationToken));
         }
 
         public void Dispose()
         {
-            _cancellationTokenSource?.Cancel();
+            if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            {
+                return;
+            }
+
             // release the MessageReceived handlers to prevent any possible memory leak
             MessageReceived = null;
+            _cancellationTokenSource.Cancel();
+            _cancellationTokenSource.Dispose();
         }
 
-        private void HandleClientConnected(Stream pipe)
+        private async Task ListenAsync(string pipeName, CancellationToken cancellationToken)
+        {
+            var errorCount = 0;
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    using (var serverPipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
+                    {
+                        await serverPipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                        using (var clientReadCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+                        {
+                            clientReadCancellationTokenSource.CancelAfter(ClientReadTimeout);
+                            try
+                            {
+                                await HandleClientConnectedAsync(serverPipe, clientReadCancellationTokenSource.Token).ConfigureAwait(false);
+                            }
+                            catch (InvalidDataException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                            }
+                            catch (IOException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                            }
+                            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                            {
+                            }
+                        }
+                    }
+
+                    errorCount = 0;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException) when (cancellationToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch
+                {
+                    errorCount++;
+                    if (errorCount > MaxErrorsAllowed)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+
+        private async Task HandleClientConnectedAsync(Stream pipe, CancellationToken cancellationToken)
         {
             var messageReceivedHandler = MessageReceived;
             if (messageReceivedHandler == null)
@@ -61,7 +94,7 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
             }
 
             var stream = new PipeStream(pipe);
-            var message = stream.ReadString();
+            var message = await stream.ReadStringAsync(cancellationToken).ConfigureAwait(false);
             messageReceivedHandler(message);
         }
     }

@@ -15,13 +15,23 @@ namespace Xilium.CefGlue.Common.Helpers
         private int _height;
 
         private readonly object _renderLock = new object();
+        private bool _disposed;
 
         private MemoryMappedFile _mappedFile;
         private MemoryMappedViewAccessor _viewAccessor;
 
         public virtual void Dispose()
         {
-            ReleaseMemoryMap();
+            lock (_renderLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _disposed = true;
+                ReleaseMemoryMap();
+            }
             GC.SuppressFinalize(this);
         }
 
@@ -76,6 +86,11 @@ namespace Xilium.CefGlue.Common.Helpers
 
             lock (_renderLock)
             {
+                if (_disposed)
+                {
+                    return Task.CompletedTask;
+                }
+
                 var pixels = width * height;
                 var bytesPerPixel = BytesPerPixel;
                 var byteCount = pixels * bytesPerPixel;
@@ -101,6 +116,11 @@ namespace Xilium.CefGlue.Common.Helpers
                 {
                     lock (_renderLock)
                     {
+                        if (_disposed)
+                        {
+                            return;
+                        }
+
                         // quick size check - actual browser size changed?
                         if (width != ScaledWidth || height != ScaledHeight)
                         {
@@ -163,8 +183,16 @@ namespace Xilium.CefGlue.Common.Helpers
 
         public void Resize(int width, int height)
         {
-            _width = width;
-            _height = height;
+            lock (_renderLock)
+            {
+                if (_disposed)
+                {
+                    return;
+                }
+
+                _width = width;
+                _height = height;
+            }
         }
     }
 }

@@ -140,6 +140,11 @@ namespace CefGlue.Tests.Javascript
                 return "this is the result";
             }
 
+            public char EchoChar(char value)
+            {
+                return value;
+            }
+
             public DateTime MethodWithDateTimeReturn()
             {
                 return DateValue;
@@ -398,6 +403,18 @@ namespace CefGlue.Tests.Javascript
             Assert.AreEqual(nativeObject.MethodWithStringReturn(), result);
         }
 
+        [TestCase("S")]
+        [TestCase("D")]
+        [TestCase("B")]
+        public async Task NativeObjectMethodMarkerCharResultIsReturned(string value)
+        {
+            Execute($"{ObjName}.echoChar('{value}').then(r => {ObjName}.setResult(r === '{value}'));");
+
+            var result = await nativeObject.ResultTask;
+
+            Assert.IsTrue((bool)result);
+        }
+
         [Test]
         public async Task NativeObjectMethodDateTimeResultIsReturned()
         {
@@ -490,7 +507,7 @@ namespace CefGlue.Tests.Javascript
 
             var result = await nativeObject.ResultTask;
 
-            Assert.AreEqual(nativeObject.AsyncMethodReturnException().Exception.Message, result);
+            Assert.AreEqual("error", result);
         }
     }
 }

@@ -20,6 +20,7 @@ namespace Xilium.CefGlue.WPF.Platform
     {
         private ToolTip _tooltip;
         private DispatcherTimer _tooltipTimer;
+        private string _tooltipText;
 
         private Point _browserScreenLocation;
 
@@ -72,6 +73,7 @@ namespace Xilium.CefGlue.WPF.Platform
 
             _tooltipTimer = new DispatcherTimer();
             _tooltipTimer.Interval = TimeSpan.FromSeconds(0.5);
+            _tooltipTimer.Tick += OnTooltipTimerTick;
 
             var image = CreateImage();
             SetContent(image);
@@ -248,15 +250,22 @@ namespace Xilium.CefGlue.WPF.Platform
 
         public override void SetTooltip(string text)
         {
+            _tooltipText = text;
             if (string.IsNullOrEmpty(text))
             {
+                _tooltipTimer.Stop();
                 UpdateTooltip(null);
             }
             else
             {
-                _tooltipTimer.Tick += (sender, args) => UpdateTooltip(text);
                 _tooltipTimer.Start();
             }
+        }
+
+        private void OnTooltipTimerTick(object sender, EventArgs e)
+        {
+            _tooltipTimer.Stop();
+            UpdateTooltip(_tooltipText);
         }
 
         public async Task<CefDragOperationsMask> StartDrag(CefDragData dragData, CefDragOperationsMask allowedOps, int x, int y)

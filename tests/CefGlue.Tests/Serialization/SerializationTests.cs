@@ -110,6 +110,9 @@ namespace CefGlue.Tests.Serialization
         public void HandlesChars()
         {
             AssertSerialization('c');
+            AssertSerialization('S');
+            AssertSerialization('D');
+            AssertSerialization('B');
         }
 
         [Test]
@@ -317,6 +320,42 @@ namespace CefGlue.Tests.Serialization
             object obtainedValue = null;
 
             Assert.DoesNotThrow(() => obtainedValue = Deserializer.Deserialize<List<object>>(json));
+        }
+
+        [Test]
+        public void RejectsSerializationOfObjectGraphBeyondMaximumDepth()
+        {
+            var list = new List<object>();
+            var child = list;
+
+            for (var i = 0; i < 300; i++)
+            {
+                var nestedChild = new List<object>();
+                child.Add(nestedChild);
+                child = nestedChild;
+            }
+
+            Assert.Throws<InvalidOperationException>(() => Serialize(list));
+        }
+
+        [Test]
+        public void RejectsSerializationOfJsonElementBeyondMaximumDepth()
+        {
+            const int Depth = 513;
+            var json = new string('[', Depth) + "0" + new string(']', Depth);
+            using (var document = JsonDocument.Parse(json, new JsonDocumentOptions() { MaxDepth = Depth + 1 }))
+            {
+                Assert.Throws<InvalidOperationException>(() => Serialize(document.RootElement));
+            }
+        }
+
+        [Test]
+        public void RejectsDeserializationBeyondMaximumDepth()
+        {
+            const int Depth = 513;
+            var json = new string('[', Depth) + "0" + new string(']', Depth);
+
+            Assert.Catch<JsonException>(() => Deserializer.Deserialize<object>(json));
         }
 
         [Test]

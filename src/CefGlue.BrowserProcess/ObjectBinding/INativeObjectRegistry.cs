@@ -1,10 +1,8 @@
-using System.Threading.Tasks;
-
 namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
 {
     internal interface INativeObjectRegistry
     {
-        Task<bool> Bind(string objName);
+        PromiseHolder Bind(string objName, CefV8Context context);
         void Unbind(string objName);
     }
 }

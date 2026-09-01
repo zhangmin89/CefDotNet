@@ -1,5 +1,4 @@
 using System;
-using System.Threading.Tasks;
 using Xilium.CefGlue.Common.Shared.Helpers;
 
 namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
@@ -27,44 +26,24 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                             var (valid, argException) = CheckArguments(arguments, a => a.IsString);
                             if (valid)
                             {
-                                Task<bool> boundQueryTask;
                                 PromiseHolder resultingPromise;
 
                                 var objectName = arguments[0].GetStringValue();
 
-                                using (var context = CefV8Context.GetCurrentContext().EnterOrFail(shallDispose: false)) // context will be released when promise is resolved
+                                var context = CefV8Context.GetCurrentContext().EnterOrFail(shallDispose: false); // context will be released when promise is resolved
+                                try
                                 {
-                                    resultingPromise = context.V8Context.CreatePromise();
-                                    returnValue = resultingPromise.Promise; // do not dispose, because it will be delivered to cef
-
-                                    boundQueryTask = _nativeObjectRegistry.Bind(objectName);
-                                }
-
-                                
-                                boundQueryTask.ContinueWith(t =>
-                                {
-                                    var context = resultingPromise.Context;
-                                    context.GetTaskRunner().PostTask(new ActionTask(() =>
+                                    using (context)
                                     {
-                                        using (CefObjectTracker.StartTracking())
-                                        using (context.EnterOrFail())
-                                        {
-                                            resultingPromise.ResolveOrReject((resolve, reject) =>
-                                            {
-                                                if (t.IsFaulted)
-                                                {
-                                                    var exceptionMsg = CefV8Value.CreateString(t.Exception.Message);
-                                                    reject(exceptionMsg);
-                                                }
-                                                else
-                                                {
-                                                    var result = CefV8Value.CreateBool(t.Result);
-                                                    resolve(result);
-                                                }
-                                            });
-                                        }
-                                    }));
-                                });
+                                        resultingPromise = _nativeObjectRegistry.Bind(objectName, context.V8Context);
+                                        returnValue = resultingPromise.Promise; // do not dispose, because it will be delivered to cef
+                                    }
+                                }
+                                catch
+                                {
+                                    context.V8Context.Dispose();
+                                    throw;
+                                }
                             }
                             else
                             {

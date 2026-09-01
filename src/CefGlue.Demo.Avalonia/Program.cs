@@ -14,31 +14,41 @@ namespace Xilium.CefGlue.Demo.Avalonia
             // generate a unique cache path to avoid problems when launching more than one process
             // https://www.magpcss.org/ceforum/viewtopic.php?f=6&t=19665
             var cachePath = Path.Combine(Path.GetTempPath(), "CefGlue_" + Guid.NewGuid().ToString().Replace("-", null));
-            
-            AppDomain.CurrentDomain.ProcessExit += delegate { Cleanup(cachePath); };
-            
-            AppBuilder.Configure<App>()
-                      .UsePlatformDetect()
-                      .With(new Win32PlatformOptions())
-                      .AfterSetup(_ => CefRuntimeLoader.Initialize(new CefSettings() {
-                          RootCachePath = cachePath,
+            var cefInitialized = false;
+
+            try
+            {
+                return AppBuilder.Configure<App>()
+                         .UsePlatformDetect()
+                         .With(new Win32PlatformOptions())
+                         .AfterSetup(_ => {
+                             CefRuntimeLoader.Initialize(new CefSettings() {
+                                 RootCachePath = cachePath,
 #if WINDOWLESS 
-                          // its recommended to leave this off (false), since its less performant and can cause more issues
-                          WindowlessRenderingEnabled = true
+                                 // its recommended to leave this off (false), since its less performant and can cause more issues
+                                 WindowlessRenderingEnabled = true
 #else
-                          WindowlessRenderingEnabled = false
+                                 WindowlessRenderingEnabled = false
 #endif
-                      },
-                      customSchemes: new[] {
-                        new CustomScheme()
-                        {
-                            SchemeName = "test",
-                            SchemeHandlerFactory = new CustomSchemeHandler()
-                        }
-                      }))
-                      .StartWithClassicDesktopLifetime(args);
-                      
-            return 0;
+                             },
+                             customSchemes: new[] {
+                               new CustomScheme()
+                               {
+                                   SchemeName = "test",
+                                   SchemeHandlerFactory = new CustomSchemeHandler()
+                               }
+                             });
+                             cefInitialized = true;
+                         })
+                         .StartWithClassicDesktopLifetime(args);
+            }
+            finally
+            {
+                if (cefInitialized)
+                {
+                    Cleanup(cachePath);
+                }
+            }
         }
 
         private static void Cleanup(string cachePath)

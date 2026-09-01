@@ -21,5 +21,10 @@ namespace Xilium.CefGlue.Common.Shared.Helpers
         {
             CefRuntime.PostTask(threadId, new ActionTask(action));
         }
+
+        public static void Run(Action action, TimeSpan delay, CefThreadId threadId = CefThreadId.UI)
+        {
+            CefRuntime.PostTask(threadId, new ActionTask(action), (long)delay.TotalMilliseconds);
+        }
     }
 }

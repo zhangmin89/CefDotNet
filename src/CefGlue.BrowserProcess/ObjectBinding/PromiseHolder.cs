@@ -14,12 +14,19 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
 
         public CefV8Context Context { get; }
 
+        public CefBrowser? Browser { get; }
+
         public PromiseHolder(CefV8Value promise, CefV8Value resolve, CefV8Value reject, CefV8Context context)
         {
             Promise = promise;
             Context = context;
             _resolve = resolve;
             _reject = reject;
+            Browser = context.GetBrowser();
+            if (Browser != null)
+            {
+                CefObjectTracker.Untrack(Browser);
+            }
         }
 
         public void ResolveOrReject(Action<ResolveHandler, RejectHandler> action)
@@ -49,6 +56,7 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             _resolve.Dispose();
             _reject.Dispose();
             Promise.Dispose();
+            Browser?.Dispose();
         }
     }
 }

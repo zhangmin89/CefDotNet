@@ -9,13 +9,14 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
 {
     internal static class Serializer
     {
-        private const int SerializerMaxDepth = int.MaxValue;
+        private const int SerializerMaxDepth = 512;
         
         private static readonly JsonSerializerOptions _jsonSerializerOptions = new JsonSerializerOptions()
         {
             Converters =
             {
                 new StringJsonConverter(),
+                new CharJsonConverter(),
                 new DateTimeJsonConverter(),
                 new BinaryJsonConverter()
             },
@@ -33,7 +34,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
             catch (JsonException e)
             {
                 // wrap the json exception
-                throw new InvalidOperationException(e.Message);
+                throw new InvalidOperationException(e.Message, e);
             }
         }
     }

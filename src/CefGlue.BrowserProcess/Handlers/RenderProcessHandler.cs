@@ -30,16 +30,17 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
         protected override bool OnProcessMessageReceived(CefBrowser browser, CefFrame frame, CefProcessId sourceProcess, CefProcessMessage message)
         {
             using (message)
-            
-            WithErrorHandling(() =>
             {
-                using (CefObjectTracker.StartTracking())
+                WithErrorHandling(() =>
                 {
-                    _messageDispatcher.DispatchMessage(browser, frame, sourceProcess, message);
-                }
-            }, frame);
-            
-            return base.OnProcessMessageReceived(browser, frame, sourceProcess, message);
+                    using (CefObjectTracker.StartTracking())
+                    {
+                        _messageDispatcher.DispatchMessage(browser, frame, sourceProcess, message);
+                    }
+                }, frame);
+
+                return base.OnProcessMessageReceived(browser, frame, sourceProcess, message);
+            }
         }
 
         protected override void OnContextCreated(CefBrowser browser, CefFrame frame, CefV8Context context)
@@ -64,7 +65,7 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
             {
                 using (CefObjectTracker.StartTracking())
                 {
-                    _javascriptToNativeDispatcher.HandleContextReleased(context, frame.IsMain);
+                    _javascriptToNativeDispatcher.HandleContextReleased(context);
                     base.OnContextReleased(browser, frame, context);
 
                     var message = new Messages.JsContextReleased();
@@ -111,8 +112,33 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
         protected override void OnBrowserCreated(CefBrowser browser, CefDictionaryValue? extraInfo)
         {
             _crashPipeName = extraInfo?.GetString(Constants.CrashPipeNameKey);
+            var previousBrowser = _browser;
             _browser = browser;
-            base.OnBrowserCreated(browser, extraInfo);
+            try
+            {
+                base.OnBrowserCreated(browser, extraInfo);
+            }
+            finally
+            {
+                if (!ReferenceEquals(previousBrowser, browser))
+                {
+                    previousBrowser?.Dispose();
+                }
+            }
+        }
+
+        protected override void OnBrowserDestroyed(CefBrowser browser)
+        {
+            WithErrorHandling(() =>
+            {
+                _javascriptToNativeDispatcher.HandleBrowserDestroyed(browser);
+                if (_browser?.IsSame(browser) == true)
+                {
+                    _browser.Dispose();
+                    _browser = null;
+                }
+                base.OnBrowserDestroyed(browser);
+            }, null);
         }
 
         private void OnUnhandledException(object sender, UnhandledExceptionEventArgs e)

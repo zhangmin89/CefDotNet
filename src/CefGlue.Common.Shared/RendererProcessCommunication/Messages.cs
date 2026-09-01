@@ -128,11 +128,11 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
                 return message;
             }
 
-            public static NativeObjectRegistrationRequest FromCefMessage(CefProcessMessage message)
+            public static NativeObjectUnregistrationRequest FromCefMessage(CefProcessMessage message)
             {
                 using (var arguments = message.Arguments)
                 {
-                    return new NativeObjectRegistrationRequest()
+                    return new NativeObjectUnregistrationRequest()
                     {
                         ObjectName = arguments.GetString(0),
                     };
