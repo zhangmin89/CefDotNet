@@ -12,8 +12,15 @@ namespace Xilium.CefGlue.WPF
     /// </summary>
     public class WpfCefBrowser : BaseCefBrowser
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WpfCefBrowser"/> class.
+        /// </summary>
         public WpfCefBrowser() : this(null) { }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="WpfCefBrowser"/> class.
+        /// </summary>
+        /// <param name="cefRequestContextFactory">The factory used to create the request context.</param>
         public WpfCefBrowser(Func<CefRequestContext> cefRequestContextFactory)
             : base(cefRequestContextFactory)
         {

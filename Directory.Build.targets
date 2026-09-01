@@ -1,4 +1,9 @@
 <Project>
+  <!-- Keep repository builds self-contained instead of running Avalonia's user-profile telemetry task. -->
+  <PropertyGroup>
+    <UsedAvaloniaProducts />
+  </PropertyGroup>
+
   <PropertyGroup Condition="'$(IsPackable)' == 'false'">
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <DocumentationFile />
@@ -18,6 +23,7 @@
 
   <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
     <CefGlueBrowserProcessAssetsPath>$(CefGlueArtifactsPath)browser-process\local\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)\</CefGlueBrowserProcessAssetsPath>
+    <CefGlueBrowserProcessBuildArtifactsPath>$(CefGlueArtifactsPath)browser-process\local-build\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)</CefGlueBrowserProcessBuildArtifactsPath>
     <CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</CefGlueBrowserProcessExecutableName>
     <CefGlueBrowserProcessExecutableName Condition="'$(CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</CefGlueBrowserProcessExecutableName>
   </PropertyGroup>
@@ -25,7 +31,8 @@
   <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.targets" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
 
   <Target Name="PublishCefGlueBrowserProcessForLocalBuild" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-    <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Publish" BuildInParallel="false" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;PublishTrimmed=true;PublishDir=$(CefGlueBrowserProcessAssetsPath);CefGluePackageArchitecture=$(CefGlueRuntimePackageArchitecture)" />
+    <!-- Isolate every consumer's BrowserProcess build graph so nested publishes can run concurrently. -->
+    <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;ArtifactsPath=$(CefGlueBrowserProcessBuildArtifactsPath);PublishDir=$(CefGlueBrowserProcessAssetsPath);CefGluePackageArchitecture=$(CefGlueRuntimePackageArchitecture)" />
     <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)')" Text="CefGlue browser process publish did not produce '$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)'." />
   </Target>
 </Project>

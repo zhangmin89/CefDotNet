@@ -52,11 +52,6 @@
             <IncludeAssets>CefGlue.dll</IncludeAssets>
         </ProjectReference>
 
-        <ProjectReference Include="..\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj">
-            <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
-            <PrivateAssets>all</PrivateAssets>
-        </ProjectReference>
-
         <None Include="buildTransitive\CefGlue.Common.props" Pack="true" PackagePath="buildTransitive\CefGlue.Common$(CefGluePackageSuffix).props" />
         <None Include="buildTransitive\CefGlue.Common.targets" Pack="true" PackagePath="buildTransitive\CefGlue.Common$(CefGluePackageSuffix).targets" />
     </ItemGroup>
@@ -71,7 +66,7 @@
         <ItemGroup>
             <_CefGlueBrowserProcessRuntimeIdentifier Include="win-$(CefGluePackageArchitecture);linux-$(CefGluePackageArchitecture);osx-$(CefGluePackageArchitecture)" />
         </ItemGroup>
-        <MSBuild Projects="..\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Publish" BuildInParallel="false" Properties="Configuration=$(Configuration);RuntimeIdentifier=%(_CefGlueBrowserProcessRuntimeIdentifier.Identity);SelfContained=true;PublishTrimmed=true;PublishDir=$(CefGlueBrowserProcessPackageArtifactsPath)%(_CefGlueBrowserProcessRuntimeIdentifier.Identity)\;CefGluePackageArchitecture=$(CefGluePackageArchitecture)" />
+        <MSBuild Projects="..\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Publish" BuildInParallel="false" Properties="Configuration=$(Configuration);RuntimeIdentifier=%(_CefGlueBrowserProcessRuntimeIdentifier.Identity);SelfContained=true;BuildInParallel=false;PublishDir=$(CefGlueBrowserProcessPackageArtifactsPath)%(_CefGlueBrowserProcessRuntimeIdentifier.Identity)\;CefGluePackageArchitecture=$(CefGluePackageArchitecture)" />
     </Target>
 
     <Target Name="CollectBrowserProcessesForPackage" DependsOnTargets="PublishBrowserProcessesForPackage">

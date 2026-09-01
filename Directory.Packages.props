@@ -2,9 +2,8 @@
 <Project>
     <PropertyGroup>
         <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-        <!-- 可选：禁止项目通过 VersionOverride 私自覆盖中央版本 -->
-        <CentralPackageVersionOverrideEnabled>true</CentralPackageVersionOverrideEnabled>
-        <MicrosoftExtensionsVersion>10.0.11</MicrosoftExtensionsVersion>
+        <!-- 禁止项目通过 VersionOverride 私自覆盖中央版本 -->
+        <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>
         <AvaloniaVersion>11.3.20</AvaloniaVersion>
         <ReactiveUIAvaloniaVersion>11.4.13</ReactiveUIAvaloniaVersion>
         <CefRedistVersion>120.1.8</CefRedistVersion>
@@ -15,13 +14,10 @@
         <PackageVersion Include="Avalonia" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Desktop" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Diagnostics" Version="$(AvaloniaVersion)" />
-        <PackageVersion Include="Avalonia.Fonts.Inter" Version="$(AvaloniaVersion)" />
         <PackageVersion Include="ReactiveUI.Avalonia" Version="$(ReactiveUIAvaloniaVersion)" />
         <PackageVersion Include="Avalonia.Themes.Simple" Version="$(AvaloniaVersion)" />
-        <PackageVersion Include="CefSharp.OffScreen.NETCore" Version="151.3.170" />
         <PackageVersion Include="Dotnet.Bundle" Version="0.9.13" />
         <PackageVersion Include="System.Reactive" Version="6.1.0" />
-        <PackageVersion Include="System.Runtime.Loader" Version="4.3.0" />
         <PackageVersion Include="chromiumembeddedframework.runtime" Version="$(CefRedistVersion)" />
         <PackageVersion Include="chromiumembeddedframework.runtime.win-x64" Version="$(CefRedistVersion)" />
         <PackageVersion Include="chromiumembeddedframework.runtime.win-arm64" Version="$(CefRedistVersion)" />
@@ -29,14 +25,10 @@
         <PackageVersion Include="cef.redist.linuxarm64" Version="$(CefRedistLinuxVersion)" />
         <PackageVersion Include="cef.redist.osx64" Version="$(CefRedistOSXVersion)" />
         <PackageVersion Include="cef.redist.osx.arm64" Version="$(CefRedistOSXVersion)" />
-        <PackageVersion Include="nunit" Version="3.12.0" />
-        <PackageVersion Include="NUnit3TestAdapter" Version="3.17.0" />
-        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="16.2.0" />
-        <PackageVersion Include="Moq" Version="4.10.1" />
-        <PackageVersion Include="System.Data.DataSetExtensions" Version="4.5.0" />
-    </ItemGroup>
-
-    <ItemGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch($(DefineConstants), '(^|;)HAS_NLOG($|;)'))">
-        <PackageVersion Include="NLog" Version="4.6.2" />
+        <PackageVersion Include="nunit" Version="4.6.1" />
+        <PackageVersion Include="NUnit3TestAdapter" Version="6.3.0" />
+        <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.9.0" />
+        <PackageVersion Include="Newtonsoft.Json" Version="13.0.4" />
+        <PackageVersion Include="NLog" Version="6.2.0" />
     </ItemGroup>
 </Project>

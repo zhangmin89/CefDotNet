@@ -5,9 +5,6 @@
 
         <!-- CefGlue 构建配置 -->
         <DotnetVersion>net8.0</DotnetVersion>
-        <CefRedistVersion>120.1.8</CefRedistVersion>
-        <CefRedistOSXVersion>120.1.8</CefRedistOSXVersion>
-        <CefRedistLinuxVersion>120.1.8</CefRedistLinuxVersion>
         <Platforms>x64;ARM64</Platforms>
         <Configurations>Debug;Debug_WindowlessRender;Release;ReleaseWPFAvalonia</Configurations>
 

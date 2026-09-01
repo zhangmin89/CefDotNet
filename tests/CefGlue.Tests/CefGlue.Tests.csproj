@@ -19,7 +19,13 @@
     <PackageReference Include="nunit" />
     <PackageReference Include="NUnit3TestAdapter" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="Moq" />
+    <PackageReference Include="Newtonsoft.Json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="NUnit.Framework.Legacy.ClassicAssert" Alias="Assert" />
+    <Using Include="NUnit.Framework.Legacy.CollectionAssert" Alias="CollectionAssert" />
+    <Using Include="NUnit.Framework.Legacy.StringAssert" Alias="StringAssert" />
   </ItemGroup>
 
   <ItemGroup>

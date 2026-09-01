@@ -18,8 +18,8 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
     
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <DocumentationFile>bin\Release\Xilium.CefGlue.WPF.xml</DocumentationFile>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' Or '$(Configuration)' == 'ReleaseWPFAvalonia'">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
     
   <PropertyGroup Condition="'$(Configuration)' == 'Debug_WindowlessRender'">
@@ -45,7 +45,4 @@
     </ProjectReference>
   </ItemGroup>
     
-  <ItemGroup>
-    <PackageReference PrivateAssets="all" Include="System.Data.DataSetExtensions" />
-  </ItemGroup>
 </Project>

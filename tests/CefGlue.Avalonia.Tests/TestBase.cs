@@ -13,6 +13,9 @@ using Xilium.CefGlue.Common.Shared;
 
 namespace CefGlue.Tests
 {
+#if !DEBUG
+    [CancelAfter(30000)]
+#endif
     public class TestBase
     {
         private static object initLock = new object();

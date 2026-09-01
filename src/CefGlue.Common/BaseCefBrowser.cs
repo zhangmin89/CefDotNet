@@ -12,12 +12,19 @@ namespace Xilium.CefGlue.Common
     /// </summary>
     public abstract partial class BaseCefBrowser : IDisposable
     {
+        /// <summary>
+        /// The logger used by the browser implementation.
+        /// </summary>
         protected readonly ILogger _logger;
 
         private readonly CommonBrowserAdapter _adapter;
 
         #region Disposable
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="BaseCefBrowser"/> class.
+        /// </summary>
+        /// <param name="cefRequestContextFactory">The factory used to create the request context.</param>
         public BaseCefBrowser(Func<CefRequestContext> cefRequestContextFactory = null)
         {
             if (!CefRuntimeLoader.IsLoaded)
@@ -41,17 +48,27 @@ namespace Xilium.CefGlue.Common
             }
         }
 
+        /// <summary>
+        /// Finalizes an instance of the <see cref="BaseCefBrowser"/> class.
+        /// </summary>
         ~BaseCefBrowser()
         {
             Dispose(false);
         }
 
+        /// <summary>
+        /// Releases the resources used by the browser.
+        /// </summary>
         public void Dispose()
         {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Releases the resources used by the browser.
+        /// </summary>
+        /// <param name="disposing">Whether managed resources should also be released.</param>
         protected virtual void Dispose(bool disposing)
         {
             _adapter?.Dispose(disposing);
@@ -379,6 +396,10 @@ namespace Xilium.CefGlue.Common
             return _adapter.IsJavascriptObjectRegistered(name);
         }
 
+        /// <summary>
+        /// Applies the specified zoom command to the browser.
+        /// </summary>
+        /// <param name="command">The zoom command to apply.</param>
         public void Zoom(CefZoomCommand command)
         {
             _adapter.Zoom(command);

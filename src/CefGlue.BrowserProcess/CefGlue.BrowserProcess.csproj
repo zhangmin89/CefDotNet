@@ -24,10 +24,6 @@
     <ProjectReference Include="..\CefGlue\CefGlue.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Runtime.Loader" />
-  </ItemGroup>
-
   <Target Name="Editbin" AfterTargets="Compile" Condition="$(IsEditbinEnabled) == True And $(VcvarsFile) != '' And $([MSBuild]::IsOSPlatform('Windows')) And $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">
     <!--
       Quick explanation: This target runs after compile, and currently 3 more times for each MSBuild command executed in the next target "PublishApp".

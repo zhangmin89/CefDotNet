@@ -1,4 +1,4 @@
-﻿// NLog dependency was removed.
+﻿// NLog support is enabled when HAS_NLOG is defined.
 #if HAS_NLOG
 
 using System;

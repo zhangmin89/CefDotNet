@@ -1,5 +1,1 @@
-using NUnit.Framework;
-
-#if !DEBUG
-[assembly: Timeout(30000)]
-#endif
+// The release test timeout is configured on TestBase because CancelAfterAttribute cannot target assemblies.
