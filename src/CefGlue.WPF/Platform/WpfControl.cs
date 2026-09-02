@@ -16,7 +16,10 @@ namespace Xilium.CefGlue.WPF.Platform
     internal class WpfControl : IControl
     {
         protected readonly FrameworkElement _control;
-        private ExtendedWpfNativeControlHost _nativeControl;
+        private readonly object _renderLock = new object();
+        private IntPtr _browserHandle;
+        private object? _renderOperation;
+        private ExtendedWpfNativeControlHost? _nativeControl;
         
         public event Action GotFocus;
         public event Action<CefSize> SizeChanged;
@@ -141,25 +144,55 @@ namespace Xilium.CefGlue.WPF.Platform
 
         public void InitializeRender(IntPtr browserHandle)
         {
+            var renderOperation = new object();
+            lock (_renderLock)
+            {
+                _browserHandle = browserHandle;
+                _renderOperation = renderOperation;
+            }
+
             _control.Dispatcher.BeginInvoke(
                 DispatcherPriority.Input,
                 new Action(() =>
                 {
-                    _nativeControl = new ExtendedWpfNativeControlHost(browserHandle);
-                    ((ContentControl) _control).Content = _nativeControl;
+                    lock (_renderLock)
+                    {
+                        if (!ReferenceEquals(_renderOperation, renderOperation))
+                        {
+                            return;
+                        }
+
+                        _nativeControl = new ExtendedWpfNativeControlHost(browserHandle);
+                        ((ContentControl) _control).Content = _nativeControl;
+                    }
                 })
             );
         }
 
         public void DestroyRender()
         {
-            _nativeControl.DestroyWindow(); // must be destroyed on current thread
+            IntPtr browserHandle;
+            ExtendedWpfNativeControlHost? nativeControl;
+            lock (_renderLock)
+            {
+                browserHandle = _browserHandle;
+                _browserHandle = IntPtr.Zero;
+                _renderOperation = null;
+                nativeControl = _nativeControl;
+                _nativeControl = null;
+            }
+
+            ExtendedWpfNativeControlHost.DestroyWindow(browserHandle); // must be destroyed on current thread
+            if (nativeControl == null)
+            {
+                return;
+            }
+
             _control.Dispatcher.BeginInvoke(
                 DispatcherPriority.Normal,
                 new Action(() =>
                 {
-                    // dispose remaining resources
-                    _nativeControl.Dispose();
+                    nativeControl.Dispose();
                 })
             );
         }

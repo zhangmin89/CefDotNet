@@ -13,6 +13,7 @@
 
         private static bool _loaded;
         private static bool _initialized;
+        private static bool _shutdown;
 
         static CefRuntime()
         {
@@ -206,6 +207,8 @@
         /// </summary>
         public static void Initialize(CefMainArgs args, CefSettings settings, CefApp application, IntPtr windowsSandboxInfo)
         {
+            if (_shutdown) throw ExceptionBuilder.CefRuntimeAlreadyShutdown();
+
             LoadIfNeed();
 
             if (args == null) throw new ArgumentNullException("args");
@@ -259,6 +262,7 @@
             }
 
             libcef.shutdown();
+            _shutdown = true;
             _initialized = false;
         }
 
@@ -647,11 +651,11 @@
 
         public static string Base64Encode(byte[] bytes, int offset, int length)
         {
-            // TODO: check bounds
+            if (offset < 0 || length < 0 || bytes.Length - offset < length) throw new ArgumentOutOfRangeException();
 
-            fixed (byte* bytes_ptr = &bytes[offset])
+            fixed (byte* bytes_ptr = bytes)
             {
-                return Base64Encode(bytes_ptr, length);
+                return Base64Encode(bytes_ptr + offset, length);
             }
         }
 
@@ -743,13 +747,19 @@
             {
                 var n_value = new cef_string_t(value_str, value != null ? value.Length : 0);
 
-                cef_string_t n_error_msg;
+                cef_string_t n_error_msg = default;
                 var n_result = libcef.parse_jsonand_return_error(&n_value, options, &n_error_msg);
 
-                var result = CefValue.FromNativeOrNull(n_result);
-                // TODO: This probably error, see ResolveUrl case.
-                errorMessage = cef_string_userfree.ToString((cef_string_userfree*)&n_error_msg);
-                return result;
+                try
+                {
+                    var result = CefValue.FromNativeOrNull(n_result);
+                    errorMessage = cef_string_t.ToString(&n_error_msg);
+                    return result;
+                }
+                finally
+                {
+                    libcef.string_clear(&n_error_msg);
+                }
             }
         }
 

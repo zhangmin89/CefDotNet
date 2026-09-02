@@ -12,5 +12,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj" />
     <Project Path="tests/CefGlue.Tests/CefGlue.Tests.csproj" />
+    <Project Path="tests/CefGlue.WPF.Tests/CefGlue.WPF.Tests.csproj" />
   </Folder>
 </Solution>

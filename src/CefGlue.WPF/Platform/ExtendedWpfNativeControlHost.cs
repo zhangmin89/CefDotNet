@@ -7,7 +7,7 @@ namespace Xilium.CefGlue.WPF.Platform
     internal class ExtendedWpfNativeControlHost : HwndHost
     {
         [DllImport("user32.dll", EntryPoint = "DestroyWindow", CharSet = CharSet.Unicode)]
-        private static extern bool DestroyWindow(IntPtr hwnd);
+        private static extern bool DestroyNativeWindow(IntPtr hwnd);
 
         private readonly IntPtr _browserHandle;
 
@@ -26,9 +26,9 @@ namespace Xilium.CefGlue.WPF.Platform
             // nothing to do
         }
 
-        public void DestroyWindow()
+        public static void DestroyWindow(IntPtr browserHandle)
         {
-            DestroyWindow(_browserHandle);
+            DestroyNativeWindow(browserHandle);
         }
     }
 }

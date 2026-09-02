@@ -31,6 +31,11 @@
             return new InvalidOperationException("CEF runtime already initialized.");
         }
 
+        public static Exception CefRuntimeAlreadyShutdown()
+        {
+            return new InvalidOperationException("CEF runtime cannot be initialized after shutdown.");
+        }
+
         public static Exception CefRuntimeNotInitialized()
         {
             return new InvalidOperationException("CEF runtime is not initialized.");
