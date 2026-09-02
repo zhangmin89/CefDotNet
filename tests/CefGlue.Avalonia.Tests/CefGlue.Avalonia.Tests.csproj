@@ -46,4 +46,8 @@
     <ProjectReference Include="..\..\src\CefGlue\CefGlue.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\TestInfrastructure\CefRunContextMenuCallbackHarness.cs" Link="TestInfrastructure\CefRunContextMenuCallbackHarness.cs" />
+  </ItemGroup>
+
 </Project>

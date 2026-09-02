@@ -6,6 +6,7 @@
     <IsTestProject>true</IsTestProject>
     <UseWPF>true</UseWPF>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +21,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CefGlue.WPF\CefGlue.WPF.csproj" />
+    <ProjectReference Include="..\..\src\CefGlue.Common\CefGlue.Common.csproj" />
+    <ProjectReference Include="..\..\src\CefGlue\CefGlue.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\TestInfrastructure\CefRunContextMenuCallbackHarness.cs" Link="TestInfrastructure\CefRunContextMenuCallbackHarness.cs" />
   </ItemGroup>
 
 </Project>

@@ -156,6 +156,13 @@ namespace CefGlue.Tests.Javascript
             }
         }
 
+        private sealed class LateBoundObject
+        {
+            public void Ping()
+            {
+            }
+        }
+
         private Task Load()
         {
             return Browser.LoadContent($"<script></script>");
@@ -187,6 +194,44 @@ namespace CefGlue.Tests.Javascript
 
             var unregisteredObjectDefined = await EvaluateJavascript<bool>($"return window['foo'] === null");
             Assert.IsFalse(unregisteredObjectDefined);
+        }
+
+        [Test]
+        public async Task UnregisterRemovesObjectFromCurrentJavascriptContext()
+        {
+            Browser.UnregisterJavascriptObject(ObjName);
+
+            var objectWasRemoved = await EvaluateJavascript<bool>($"return typeof window['{ObjName}'] === 'undefined';");
+
+            Assert.IsTrue(objectWasRemoved);
+        }
+
+        [Test]
+        public async Task PendingBindCompletesWhenObjectIsRegistered()
+        {
+            const string LateObjectName = "lateBoundObject";
+            var bindingStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            nativeObject.TestCalled += () => bindingStarted.TrySetResult(true);
+            Execute($"{ObjName}.test(); cefglue.checkObjectBound('{LateObjectName}').then(result => {ObjName}.setResult(result));");
+            await bindingStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Browser.RegisterJavascriptObject(new LateBoundObject(), LateObjectName);
+
+            Assert.IsTrue((bool)await nativeObject.ResultTask.WaitAsync(TimeSpan.FromSeconds(5)));
+        }
+
+        [Test]
+        public async Task PendingBindIsReleasedWhenJavascriptContextIsReplaced()
+        {
+            const string MissingObjectName = "neverBoundObject";
+            var bindingStarted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            nativeObject.TestCalled += () => bindingStarted.TrySetResult(true);
+            Execute($"{ObjName}.test(); window.pendingBinding = cefglue.checkObjectBound('{MissingObjectName}');");
+            await bindingStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+            await Browser.LoadContent("<script></script>");
+
+            Assert.AreEqual(1, await EvaluateJavascript<int>("return 1;"));
         }
 
         [Test]
