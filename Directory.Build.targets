@@ -1,38 +1,33 @@
 <Project>
-  <!-- Keep repository builds self-contained instead of running Avalonia's user-profile telemetry task. -->
-  <PropertyGroup>
-    <UsedAvaloniaProducts />
-  </PropertyGroup>
+    <!-- Keep repository builds self-contained instead of running Avalonia's user-profile telemetry task. -->
+    <PropertyGroup>
+        <UsedAvaloniaProducts />
+    </PropertyGroup>
 
-  <PropertyGroup Condition="'$(IsPackable)' == 'false'">
-    <GenerateDocumentationFile>false</GenerateDocumentationFile>
-    <DocumentationFile />
-  </PropertyGroup>
+    <PropertyGroup Condition="'$(IsPackable)' == 'false'">
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <DocumentationFile />
+    </PropertyGroup>
 
-  <Target Name="ValidateCefGluePackageArchitecture" BeforeTargets="PrepareForBuild" Condition="'$(CefGluePackageArchitecture)' != 'x64' and '$(CefGluePackageArchitecture)' != 'arm64'">
-    <Error Text="CefGluePackageArchitecture must be 'x64' or 'arm64', but was '$(CefGluePackageArchitecture)'." />
-  </Target>
+    <!-- NuGet 自动导入 buildTransitive；仓库内的示例和测试通过同一份目标消费本地产物。 -->
+    <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+        <CefGluePrepareRuntimeAssetsTargets>PublishCefGlueBrowserProcessForLocalBuild</CefGluePrepareRuntimeAssetsTargets>
+    </PropertyGroup>
 
-  <!-- NuGet 自动导入 buildTransitive；仓库内的示例和测试通过同一份目标消费本地产物。 -->
-  <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-    <CefGlueRuntimePackageArchitecture>$(CefGluePackageArchitecture)</CefGlueRuntimePackageArchitecture>
-    <CefGluePrepareRuntimeAssetsTargets>PublishCefGlueBrowserProcessForLocalBuild</CefGluePrepareRuntimeAssetsTargets>
-  </PropertyGroup>
+    <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.props" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
 
-  <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.props" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
+    <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+        <CefGlueBrowserProcessAssetsPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\browser-process\local\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)\'))</CefGlueBrowserProcessAssetsPath>
+        <CefGlueBrowserProcessBuildArtifactsPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\browser-process\local-build\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)'))</CefGlueBrowserProcessBuildArtifactsPath>
+        <CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</CefGlueBrowserProcessExecutableName>
+        <CefGlueBrowserProcessExecutableName Condition="'$(CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</CefGlueBrowserProcessExecutableName>
+    </PropertyGroup>
 
-  <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-    <CefGlueBrowserProcessAssetsPath>$(CefGlueArtifactsPath)browser-process\local\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)\</CefGlueBrowserProcessAssetsPath>
-    <CefGlueBrowserProcessBuildArtifactsPath>$(CefGlueArtifactsPath)browser-process\local-build\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)</CefGlueBrowserProcessBuildArtifactsPath>
-    <CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</CefGlueBrowserProcessExecutableName>
-    <CefGlueBrowserProcessExecutableName Condition="'$(CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</CefGlueBrowserProcessExecutableName>
-  </PropertyGroup>
+    <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.targets" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
 
-  <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.targets" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
-
-  <Target Name="PublishCefGlueBrowserProcessForLocalBuild" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-    <!-- Isolate every consumer's BrowserProcess build graph so nested publishes can run concurrently. -->
-    <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;ArtifactsPath=$(CefGlueBrowserProcessBuildArtifactsPath);PublishDir=$(CefGlueBrowserProcessAssetsPath);CefGluePackageArchitecture=$(CefGlueRuntimePackageArchitecture)" />
-    <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)')" Text="CefGlue browser process publish did not produce '$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)'." />
-  </Target>
+    <Target Name="PublishCefGlueBrowserProcessForLocalBuild" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
+        <!-- Isolate every consumer's BrowserProcess build graph so nested publishes can run concurrently. -->
+        <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;UseAppHost=true;ArtifactsPath=$(CefGlueBrowserProcessBuildArtifactsPath);PublishDir=$(CefGlueBrowserProcessAssetsPath)" />
+        <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)')" Text="CefGlue browser process publish did not produce '$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)'." />
+    </Target>
 </Project>

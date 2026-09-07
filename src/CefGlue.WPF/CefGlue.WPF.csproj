@@ -1,5 +1,5 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-    
+
   <PropertyGroup>
     <TargetFramework>$(DotnetVersion)-windows</TargetFramework>
     <OutputType>Library</OutputType>
@@ -9,7 +9,7 @@
     <UseWPF>true</UseWPF>
     <ImportWindowsDesktopTargets>true</ImportWindowsDesktopTargets>
     <IsPackable>true</IsPackable>
-    <PackageId>CefGlue.WPF$(CefGluePackageSuffix)</PackageId>
+    <PackageId>CefGlue.WPF</PackageId>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
@@ -17,25 +17,25 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-    
+
   <PropertyGroup Condition="'$(Configuration)' == 'Release' Or '$(Configuration)' == 'ReleaseWPFAvalonia'">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
-    
+
   <PropertyGroup Condition="'$(Configuration)' == 'Debug_WindowlessRender'">
     <DebugSymbols>true</DebugSymbols>
     <OutputPath>bin\$(Platform)\Debug_WindowlessRender\</OutputPath>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
-    
+
   <ItemGroup>
     <Compile Include="..\CefGlue.Common\BaseCefBrowser.cs">
       <Link>Common\BaseCefBrowser.cs</Link>
     </Compile>
     <AppDesigner Include="Properties\" />
   </ItemGroup>
-    
+
   <ItemGroup>
     <ProjectReference Include="..\CefGlue.Common\CefGlue.Common.csproj">
       <PrivateAssets>none</PrivateAssets>
@@ -44,5 +44,5 @@
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
   </ItemGroup>
-    
+
 </Project>

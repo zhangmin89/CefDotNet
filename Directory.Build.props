@@ -5,8 +5,6 @@
 
         <!-- CefGlue 构建配置 -->
         <DotnetVersion>net8.0</DotnetVersion>
-        <Platforms>x64;ARM64</Platforms>
-        <Configurations>Debug;Debug_WindowlessRender;Release;ReleaseWPFAvalonia</Configurations>
 
         <!-- C# 配置 -->
         <Nullable>enable</Nullable>
@@ -25,14 +23,5 @@
         <!-- 构建 -->
         <Deterministic>true</Deterministic>
         <DebugType>portable</DebugType>
-    </PropertyGroup>
-
-    <PropertyGroup>
-        <!-- 打包架构由 RID 或显式属性决定；Platform=ARM64 仅保留旧命令兼容性。 -->
-        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == '' and '$(RuntimeIdentifier)' != '' and $([System.String]::Copy('$(RuntimeIdentifier)').EndsWith('-arm64'))">arm64</CefGluePackageArchitecture>
-        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == '' and '$(Platform)' == 'ARM64'">arm64</CefGluePackageArchitecture>
-        <CefGluePackageArchitecture Condition="'$(CefGluePackageArchitecture)' == ''">x64</CefGluePackageArchitecture>
-        <CefGluePackageSuffix Condition="'$(CefGluePackageArchitecture)' == 'arm64'">.ARM64</CefGluePackageSuffix>
-        <CefGlueArtifactsPath>$(MSBuildThisFileDirectory)artifacts\</CefGlueArtifactsPath>
     </PropertyGroup>
 </Project>

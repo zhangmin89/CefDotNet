@@ -1,8 +1,6 @@
 <Project>
     <Target Name="ValidateCefGlueRuntimeAssets" BeforeTargets="PrepareForBuild">
         <Error Condition="'$(CefGlueTargetRuntimeIdentifier)' != 'win-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'win-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-arm64'" Text="CefGlue supports win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64; resolved '$(CefGlueTargetRuntimeIdentifier)'. Set RuntimeIdentifier explicitly when cross-compiling." />
-        <Error Condition="'$(CefGlueRuntimePackageArchitecture)' == 'x64' and !$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').EndsWith('-x64'))" Text="CefGlue.Common targets x64, but RuntimeIdentifier is '$(CefGlueTargetRuntimeIdentifier)'. Reference CefGlue.Common.ARM64 for an ARM64 target." />
-        <Error Condition="'$(CefGlueRuntimePackageArchitecture)' == 'arm64' and !$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').EndsWith('-arm64'))" Text="CefGlue.Common.ARM64 targets ARM64, but RuntimeIdentifier is '$(CefGlueTargetRuntimeIdentifier)'. Reference CefGlue.Common for an x64 target." />
     </Target>
 
     <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="$(CefGluePrepareRuntimeAssetsTargets)">
@@ -69,6 +67,107 @@
                 <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
+        </ItemGroup>
+    </Target>
+
+    <UsingTask TaskName="CreateAppHost" AssemblyFile="$(MicrosoftNETBuildTasksAssembly)" />
+    <UsingTask TaskName="PatchPeStackReserve" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+
+        <ParameterGroup>
+            <FilePath ParameterType="System.String" Required="true" />
+
+            <StackReserveBytes ParameterType="System.Int64" Required="true" />
+        </ParameterGroup>
+
+        <Task>
+            <Using Namespace="System" />
+            <Using Namespace="System.IO" />
+
+            <Code Type="Fragment" Language="cs">
+            <![CDATA[
+            using var stream = new FileStream(
+                FilePath,
+                FileMode.Open,
+                FileAccess.ReadWrite,
+                FileShare.Read);
+
+            using var reader = new BinaryReader(
+                stream,
+                System.Text.Encoding.UTF8,
+                leaveOpen: true);
+
+            using var writer = new BinaryWriter(
+                stream,
+                System.Text.Encoding.UTF8,
+                leaveOpen: true);
+
+            // DOS header -> e_lfanew
+            stream.Position = 0x3C;
+            var peOffset = reader.ReadInt32();
+
+            // PE\0\0
+            stream.Position = peOffset;
+            if (reader.ReadUInt32() != 0x00004550)
+            {
+                throw new InvalidDataException(
+                    $"'{FilePath}' is not a valid PE executable.");
+            }
+
+            // PE signature(4) + COFF header(20)
+            var optionalHeaderOffset = peOffset + 24;
+
+            stream.Position = optionalHeaderOffset;
+            var magic = reader.ReadUInt16();
+
+            // SizeOfStackReserve is offset 72 in both
+            // IMAGE_OPTIONAL_HEADER32 and IMAGE_OPTIONAL_HEADER64.
+            stream.Position = optionalHeaderOffset + 72;
+
+            switch (magic)
+            {
+                // PE32
+                case 0x10B:
+                    writer.Write(checked((uint)StackReserveBytes));
+                    break;
+
+                // PE32+
+                case 0x20B:
+                    writer.Write(checked((ulong)StackReserveBytes));
+                    break;
+
+                default:
+                    throw new InvalidDataException(
+                        $"Unsupported PE optional header magic: 0x{magic:X}");
+            }
+
+            writer.Flush();
+            ]]>
+        </Code>
+        </Task>
+    </UsingTask>
+    <Target Name="CreateCefGlueBrowserProcessAppHost" AfterTargets="ComputeFilesToPublish" DependsOnTargets="_GetAppHostPaths" Condition="'$(_IsExecutable)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(CefGlueUseLocalRuntimeAssets)' != 'true'">
+        <PropertyGroup>
+            <!-- 都不要换行 -->
+            <_CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</_CefGlueBrowserProcessExecutableName>
+            <_CefGlueBrowserProcessExecutableName Condition="'$(_CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</_CefGlueBrowserProcessExecutableName>
+            <_CefGlueBrowserProcessIntermediateDirectory>$(IntermediateOutputPath)cefglue-browser-process\</_CefGlueBrowserProcessIntermediateDirectory>
+            <_CefGlueBrowserProcessAppHost>$(_CefGlueBrowserProcessIntermediateDirectory)$(_CefGlueBrowserProcessExecutableName)</_CefGlueBrowserProcessAppHost>
+            <_CefGlueBrowserProcessAssembly>$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.dll</_CefGlueBrowserProcessAssembly>
+            <_CefGlueBrowserProcessWindowsGui>false</_CefGlueBrowserProcessWindowsGui>
+            <_CefGlueBrowserProcessWindowsGui Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">true</_CefGlueBrowserProcessWindowsGui>
+        </PropertyGroup>
+        <Error Condition="'$(AppHostSourcePath)' == '' or !Exists('$(AppHostSourcePath)')" Text="Unable to resolve apphost for RuntimeIdentifier '$(RuntimeIdentifier)'." />
+        <Error Condition="!Exists('$(_CefGlueBrowserProcessAssembly)')" Text="CefGlue BrowserProcess assembly was not found: $(_CefGlueBrowserProcessAssembly)" />
+        <MakeDir Directories="$(_CefGlueBrowserProcessIntermediateDirectory)" />
+        <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(_CefGlueBrowserProcessAppHost)" AppBinaryName="Xilium.CefGlue.BrowserProcess.dll" IntermediateAssembly="$(_CefGlueBrowserProcessAssembly)" WindowsGraphicalUserInterface="$(_CefGlueBrowserProcessWindowsGui)" Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
+        <PatchPeStackReserve Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))" FilePath="$(_CefGlueBrowserProcessAppHost)" StackReserveBytes="8388608" />
+        <ItemGroup>
+            <!-- 都不要换行 -->
+            <ResolvedFileToPublish Include="$(_CefGlueBrowserProcessAppHost)">
+                <RelativePath>$(CefGlueBrowserProcessDirectoryName)\$(_CefGlueBrowserProcessExecutableName)</RelativePath>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            </ResolvedFileToPublish>
         </ItemGroup>
     </Target>
 </Project>

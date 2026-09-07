@@ -6,16 +6,15 @@
     <AssemblyName>Xilium.CefGlue.BrowserProcess</AssemblyName>
     <RootNamespace>Xilium.CefGlue.BrowserProcess</RootNamespace>
     <IsPackable>false</IsPackable>
-    <RuntimeIdentifiers>osx-x64;osx-arm64;win-x64;win-arm64;linux-x64;linux-arm64</RuntimeIdentifiers>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <IsEditbinEnabled>True</IsEditbinEnabled>
+    <!-- 只生成可移植的 managed DLL，不生成平台相关 apphost-->
+    <UseAppHost>false</UseAppHost>
+    <!-- 不把 .NET Runtime 自己打进去，而是依赖目标机器已有的 .NET Runtime-->
+    <SelfContained>false</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
     <None Remove="ObjectBinding\CefGlueGlobalScript.js" />
-  </ItemGroup>
-
-  <ItemGroup>
     <EmbeddedResource Include="ObjectBinding\CefGlueGlobalScript.js" />
   </ItemGroup>
 
@@ -23,19 +22,4 @@
     <ProjectReference Include="..\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
     <ProjectReference Include="..\CefGlue\CefGlue.csproj" />
   </ItemGroup>
-
-  <Target Name="Editbin" AfterTargets="Compile" Condition="$(IsEditbinEnabled) == True And $(VcvarsFile) != '' And $([MSBuild]::IsOSPlatform('Windows')) And $([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">
-    <!--
-      Quick explanation: This target runs after compile, and currently 3 more times for each MSBuild command executed in the next target "PublishApp".
-      We just want this target to be executed for windows specs and when passed the VcvarsFile location.
-      Using VS Studio: VcvarsFile="$(DevEnvDir)..\..\VC\Auxiliary\Build\vcvars64.bat"
-      Using VS Studio tools: VcvarsFile="C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
-    -->
-
-    <!--
-      This command aims at increasing the stack size of Xilium.CefGlue.BrowserProcess.exe to 8 MiBs, using the visual studio tool "editbin".
-      Since we are reaching the .exe at the compile time, the file name is "apphost.exe" instead and located at /obj folder
-    -->
-    <Exec Command="call &quot;$(VcvarsFile)&quot;&#xD;&#xA; editbin /STACK:0x800000 &quot;$(IntermediateOutputPath)apphost.exe&quot;&#xD;&#xA;" />
-  </Target>
 </Project>

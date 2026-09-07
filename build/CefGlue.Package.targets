@@ -1,0 +1,43 @@
+<Project>
+    <PropertyGroup>
+        <TargetsForTfmSpecificBuildOutput>$(TargetsForTfmSpecificBuildOutput);CopyProjectReferencesToPackage</TargetsForTfmSpecificBuildOutput>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);CollectBrowserProcessesForPackage</TargetsForTfmSpecificContentInPackage>
+        <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+        <CefGlueBrowserProcessPackageArtifactsPath>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\artifacts\browser-process\package\$(Configuration)\'))</CefGlueBrowserProcessPackageArtifactsPath>
+    </PropertyGroup>
+
+    <!-- 把 CefGlue.Common 的两个 buildTransitive 文件装进 nupkg -->
+    <ItemGroup>
+        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.props" Pack="true" PackagePath="buildTransitive\CefGlue.Common.props" />
+        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.targets" Pack="true" PackagePath="buildTransitive\CefGlue.Common.targets" />
+    </ItemGroup>
+
+    <!-- 原本就有的 ProjectReference 打包逻辑 -->
+    <Target Name="CopyProjectReferencesToPackage" DependsOnTargets="ResolveReferences">
+        <ItemGroup>
+            <BuildOutputInPackage Include="@(ReferenceCopyLocalPaths->WithMetadataValue('ReferenceSourceTarget', 'ProjectReference'))" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="BuildBrowserProcessForPackage">
+        <RemoveDir Directories="$(CefGlueBrowserProcessPackageArtifactsPath)" />
+        <MSBuild Projects="$(MSBuildThisFileDirectory)..\src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Build" BuildInParallel="false" Properties="
+                Configuration=$(Configuration);
+                UseAppHost=false;
+                SelfContained=false;
+                OutputPath=$(CefGlueBrowserProcessPackageArtifactsPath);
+                AppendTargetFrameworkToOutputPath=false;
+                AppendRuntimeIdentifierToOutputPath=false" />
+
+        <Error Condition="!Exists('$(CefGlueBrowserProcessPackageArtifactsPath)Xilium.CefGlue.BrowserProcess.dll')" Text="Portable CefGlue BrowserProcess build did not produce Xilium.CefGlue.BrowserProcess.dll." />
+    </Target>
+
+    <Target Name="CollectBrowserProcessesForPackage" DependsOnTargets="BuildBrowserProcessForPackage">
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="$(CefGlueBrowserProcessPackageArtifactsPath)**\*">
+                <PackagePath>tools\browser-process\%(RecursiveDir)%(FileName)%(Extension)</PackagePath>
+            </TfmSpecificPackageFile>
+        </ItemGroup>
+    </Target>
+
+</Project>
