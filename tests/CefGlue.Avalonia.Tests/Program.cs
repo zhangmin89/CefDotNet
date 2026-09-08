@@ -53,21 +53,31 @@ namespace CefGlue.Tests
 
         private sealed class ConsoleTestListener : ITestListener
         {
-            public void TestStarted(ITest test) { }
+            // NUnit replaces Console writers while tests run. Keep the original sinks.
+            private readonly TextWriter output = Console.Out;
+            private readonly TextWriter error = Console.Error;
+
+            public void TestStarted(ITest test)
+            {
+                if (!test.IsSuite)
+                {
+                    output.WriteLine($"Running: {test.FullName}");
+                }
+            }
             public void TestFinished(ITestResult result)
             {
                 if (!result.Test.IsSuite)
                 {
-                    Console.WriteLine($"{result.ResultState}: {result.FullName}");
+                    output.WriteLine($"{result.ResultState}: {result.FullName}");
                     if (result.ResultState.Status == TestStatus.Failed)
                     {
-                        Console.Error.WriteLine(result.Message);
-                        Console.Error.WriteLine(result.StackTrace);
+                        error.WriteLine(result.Message);
+                        error.WriteLine(result.StackTrace);
                     }
                 }
             }
-            public void TestOutput(TestOutput output) => Console.Write(output.Text);
-            public void SendMessage(TestMessage message) => Console.WriteLine(message.Message);
+            public void TestOutput(TestOutput testOutput) => output.Write(testOutput.Text);
+            public void SendMessage(TestMessage message) => output.WriteLine(message.Message);
         }
     }
 }

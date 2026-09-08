@@ -65,7 +65,7 @@ namespace CefGlue.Tests
 
         internal static void InitializeApplication()
         {
-            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { RootCachePath = CacheRoot }, customSchemes: new[] {
+            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { RootCachePath = CacheRoot, LogFile = Path.Combine(AppContext.BaseDirectory, "cef-tests.log") }, customSchemes: new[] {
                 new CustomScheme()
                 {
                     SchemeName = CustomSchemeHandlerFactory.SchemeName,
