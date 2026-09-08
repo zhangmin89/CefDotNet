@@ -20,7 +20,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      CI_SOLUTION: ${{ runner.os == 'Windows' && 'CefDotNet.slnx' || 'CefDotNet.CrossPlatform.slnf' }}
+      CI_SOLUTION: ${{ startsWith(matrix.os, 'windows-') && 'CefDotNet.slnx' || 'CefDotNet.CrossPlatform.slnf' }}
 
     steps:
       - name: Checkout repository
