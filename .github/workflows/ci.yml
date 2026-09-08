@@ -21,6 +21,7 @@ jobs:
         shell: pwsh
     env:
       CI_SOLUTION: ${{ startsWith(matrix.os, 'windows-') && 'CefDotNet.slnx' || 'CefDotNet.CrossPlatform.slnf' }}
+      CEFGLUE_TRACE_JAVASCRIPT: '1'
 
     steps:
       - name: Checkout repository
@@ -47,11 +48,22 @@ jobs:
         id: build
         run: dotnet build $env:CI_SOLUTION -c Release --no-restore -m:1
 
+      - name: Prepare and verify CEF loading on Linux ARM64
+        if: runner.os == 'Linux' && runner.arch == 'ARM64'
+        shell: bash
+        env:
+          GLIBC_TUNABLES: glibc.rtld.optional_static_tls=16384
+        run: |
+          mkdir -p artifacts/native
+          cc -shared -fPIC -Wl,-z,defs .github/scripts/cef-test-tls.c -o artifacts/native/libcef-test-tls.so
+          LD_PRELOAD="$PWD/artifacts/native/libcef-test-tls.so" python3 .github/scripts/probe-cef-load.py tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/libcef.so
+
       - name: Test on Linux
         if: runner.os == 'Linux'
         env:
-          # Reserve TLS capacity; the ARM64 failure probe also reports alignment.
+          # ARM64 requires both sufficient static TLS capacity and 64-byte alignment.
           GLIBC_TUNABLES: ${{ runner.arch == 'ARM64' && 'glibc.rtld.optional_static_tls=16384' || '' }}
+          LD_PRELOAD: ${{ runner.arch == 'ARM64' && format('{0}/artifacts/native/libcef-test-tls.so', github.workspace) || '' }}
         run: xvfb-run --auto-servernum dotnet test $env:CI_SOLUTION -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
 
       - name: Test on Windows
@@ -66,12 +78,6 @@ jobs:
         if: ${{ !cancelled() && runner.os == 'macOS' && steps.build.outcome == 'success' }}
         run: dotnet tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/CefGlue.Avalonia.Tests.dll artifacts/test-results/avalonia.xml
 
-      - name: Diagnose CEF loading on Linux ARM64
-        if: ${{ failure() && runner.os == 'Linux' && runner.arch == 'ARM64' && steps.build.outcome == 'success' }}
-        env:
-          GLIBC_TUNABLES: glibc.rtld.optional_static_tls=16384
-        run: python3 .github/scripts/probe-cef-load.py tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/libcef.so
-
       - name: Upload test results and CEF logs
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         uses: actions/upload-artifact@v7
@@ -80,3 +86,4 @@ jobs:
           path: |
             artifacts/test-results/
             tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/cef-tests.log
+            tests/**/bin/Release/net8.0/**/javascript-execution-*.log

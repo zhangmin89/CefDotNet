@@ -1,4 +1,6 @@
-﻿using Xilium.CefGlue.BrowserProcess.ObjectBinding;
+﻿using System;
+using System.Diagnostics;
+using Xilium.CefGlue.BrowserProcess.ObjectBinding;
 using Xilium.CefGlue.Common.Shared.Helpers;
 using Xilium.CefGlue.Common.Shared.RendererProcessCommunication;
 
@@ -14,13 +16,17 @@ namespace Xilium.CefGlue.BrowserProcess.JavascriptExecution
         private static void HandleJavascriptEvaluation(MessageReceivedEventArgs args)
         {
             var frame = args.Frame;
+            var message = Messages.JsEvaluationRequest.FromCefMessage(args.Message);
+            var frameIdentifier = frame.Identifier;
+            JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-received", "");
 
             using (var context = frame.V8Context.EnterOrFail())
             {
-                var message = Messages.JsEvaluationRequest.FromCefMessage(args.Message);
-
                 // send script to browser
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-start", "");
+                var evaluationStarted = Stopwatch.GetTimestamp();
                 var success = context.V8Context.TryEval(JavascriptHelper.WrapScriptForEvaluation(message.Script), message.Url, message.Line, out var value, out var exception);
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-complete", FormattableString.Invariant($"success={success} executionElapsedMs={Stopwatch.GetElapsedTime(evaluationStarted).TotalMilliseconds:F3}"));
 
                 var response = new Messages.JsEvaluationResult()
                 {
@@ -31,7 +37,9 @@ namespace Xilium.CefGlue.BrowserProcess.JavascriptExecution
                 };
 
                 var cefResponseMessage = response.ToCefProcessMessage();
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-start", "");
                 frame.SendProcessMessage(CefProcessId.Browser, cefResponseMessage);
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-returned", "");
             }
         }
     }
