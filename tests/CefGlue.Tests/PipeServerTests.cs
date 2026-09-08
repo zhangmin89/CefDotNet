@@ -59,7 +59,7 @@ namespace CefGlue.Tests
 
         private static string CreatePipeName()
         {
-            return $"CefGlue.Tests.{Guid.NewGuid():N}";
+            return Guid.NewGuid().ToString("N");
         }
     }
 }

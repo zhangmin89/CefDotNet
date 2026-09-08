@@ -44,12 +44,24 @@ jobs:
         run: dotnet restore $env:CI_SOLUTION
 
       - name: Build
+        id: build
         run: dotnet build $env:CI_SOLUTION -c Release --no-restore -m:1
 
       - name: Test on Linux
         if: runner.os == 'Linux'
+        env:
+          # CEF is loaded dynamically; ARM64 needs more than glibc's default static TLS reserve.
+          GLIBC_TUNABLES: ${{ runner.arch == 'ARM64' && 'glibc.rtld.optional_static_tls=16384' || '' }}
         run: xvfb-run --auto-servernum dotnet test $env:CI_SOLUTION -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
 
-      - name: Test on Windows and macOS
-        if: runner.os != 'Linux'
+      - name: Test on Windows
+        if: runner.os == 'Windows'
         run: dotnet test $env:CI_SOLUTION -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
+
+      - name: Test core and build integration on macOS
+        if: runner.os == 'macOS'
+        run: dotnet test tests/CefGlue.Tests/CefGlue.Tests.csproj -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
+
+      - name: Test Avalonia on the macOS main thread
+        if: ${{ !cancelled() && runner.os == 'macOS' && steps.build.outcome == 'success' }}
+        run: dotnet tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/CefGlue.Avalonia.Tests.dll artifacts/test-results/avalonia.xml

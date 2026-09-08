@@ -5,6 +5,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CefGlueUseLocalRuntimeAssets>true</CefGlueUseLocalRuntimeAssets>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug_WindowlessRender'">

@@ -5,6 +5,7 @@ using CefGlue.Tests.CustomSchemes;
 using CefGlue.Tests.Helpers;
 using NUnit.Framework;
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Xilium.CefGlue.Avalonia;
@@ -20,6 +21,7 @@ namespace CefGlue.Tests
     {
         private static object initLock = new object();
         private static bool initialized = false;
+        protected static readonly string CacheRoot = Path.Combine(Path.GetTempPath(), "CefGlue.Tests", Guid.NewGuid().ToString("N"));
 
         private AvaloniaCefBrowser browser;
         private Window window;
@@ -36,14 +38,6 @@ namespace CefGlue.Tests
 
             var initializationTaskCompletionSource = new TaskCompletionSource<bool>();
 
-            CefRuntimeLoader.Initialize(customSchemes: new[] { 
-                new CustomScheme()
-                {
-                    SchemeName = CustomSchemeHandlerFactory.SchemeName,
-                    SchemeHandlerFactory = new CustomSchemeHandlerFactory()
-                }
-            });
-
             lock (initLock)
             {
                 if (initialized)
@@ -53,7 +47,7 @@ namespace CefGlue.Tests
 
                 var uiThread = new Thread(() =>
                 {
-                    AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+                    InitializeApplication();
 
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -67,6 +61,19 @@ namespace CefGlue.Tests
             }
 
             await initializationTaskCompletionSource.Task;
+        }
+
+        internal static void InitializeApplication()
+        {
+            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { RootCachePath = CacheRoot }, customSchemes: new[] {
+                new CustomScheme()
+                {
+                    SchemeName = CustomSchemeHandlerFactory.SchemeName,
+                    SchemeHandlerFactory = new CustomSchemeHandlerFactory()
+                }
+            });
+            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            initialized = true;
         }
 
         [SetUp]

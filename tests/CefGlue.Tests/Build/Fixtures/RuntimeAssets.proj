@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="../../../../src/CefGlue.Common/buildTransitive/CefGlue.Common.targets" />
+  <ItemGroup>
+    <RuntimeTargetsCopyLocalItems Include="runtimes/win-x64/native/libcef.dll" NuGetPackageId="chromiumembeddedframework.runtime.win-x64" />
+    <RuntimeTargetsCopyLocalItems Include="runtimes/win-arm64/native/libcef.dll" NuGetPackageId="chromiumembeddedframework.runtime.win-arm64" />
+    <RuntimeTargetsCopyLocalItems Include="runtimes/linux-x64/native/other.so" NuGetPackageId="Unrelated.Native" />
+    <CefRuntimeWin64Locales Include="win-x64/locales/en-US.pak" />
+    <CefRuntimeWinArm64Locales Include="win-arm64/locales/en-US.pak" />
+  </ItemGroup>
+  <Target Name="Check" DependsOnTargets="ResolveCEFAssets">
+    <ItemGroup>
+      <RemainingCef Include="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-x64'));@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-arm64'))" />
+    </ItemGroup>
+    <Error Condition="'@(RemainingCef)' != ''" Text="Duplicate CEF runtime asset: @(RemainingCef)" />
+    <Error Condition="'@(RuntimeTargetsCopyLocalItems)' != 'runtimes/linux-x64/native/other.so'" Text="Unrelated native assets were removed." />
+    <Error Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-')) and '@(None)' != 'runtimes/$(CefGlueTargetRuntimeIdentifier)/native/libcef.dll;$(CefGlueTargetRuntimeIdentifier)/locales/en-US.pak'" Text="Windows runtime selection is incorrect: @(None)" />
+    <Error Condition="!$(CefGlueTargetRuntimeIdentifier.StartsWith('win-')) and '@(None)' != ''" Text="Windows assets leaked into Unix output: @(None)" />
+  </Target>
+</Project>

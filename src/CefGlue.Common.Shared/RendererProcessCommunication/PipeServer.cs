@@ -38,13 +38,15 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
         private async Task ListenAsync(string pipeName, CancellationToken cancellationToken)
         {
             var errorCount = 0;
+            // Keep the Unix listening socket alive so queued clients survive a disconnect.
+            using var serverPipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
-                    using (var serverPipe = new NamedPipeServerStream(pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous))
+                    await serverPipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
+                    try
                     {
-                        await serverPipe.WaitForConnectionAsync(cancellationToken).ConfigureAwait(false);
                         using (var clientReadCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                         {
                             clientReadCancellationTokenSource.CancelAfter(ClientReadTimeout);
@@ -62,6 +64,10 @@ namespace Xilium.CefGlue.Common.Shared.RendererProcessCommunication
                             {
                             }
                         }
+                    }
+                    finally
+                    {
+                        serverPipe.Disconnect();
                     }
 
                     errorCount = 0;

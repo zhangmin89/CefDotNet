@@ -66,8 +66,8 @@
         </ItemGroup>
     </Target>
 
-    <Target Name="ResolveCEFAssets" Condition="$([MSBuild]::IsOSPlatform('Windows')) and ('$(CefGlueTargetRuntimeIdentifier)' == 'win-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64')" AfterTargets="ResolvePackageAssets">
-        <ItemGroup>
+    <Target Name="ResolveCEFAssets" AfterTargets="ResolvePackageAssets">
+        <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64'">
             <CefRuntimeFiles Include="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.$(CefGlueTargetRuntimeIdentifier)'))" />
             <None Include="@(CefRuntimeFiles)">
                 <Visible>false</Visible>
@@ -76,8 +76,6 @@
                 <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
-            <!-- 所选 CEF 资源已复制到主程序目录，移除 SDK 默认复制的两套 Windows runtimes 资源。 -->
-            <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-x64'));@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-arm64'))" />
             <_CefGlueWindowsLocale Include="@(CefRuntimeWin64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-x64'" />
             <_CefGlueWindowsLocale Include="@(CefRuntimeWinArm64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64'" />
             <None Include="@(_CefGlueWindowsLocale)">
@@ -87,6 +85,10 @@
                 <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
+        </ItemGroup>
+        <ItemGroup>
+            <!-- 所有平台均按目标 RID 单独收集 CEF，移除 SDK 默认复制的两套 Windows runtimes 资源。 -->
+            <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-x64'));@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-arm64'))" />
         </ItemGroup>
     </Target>
 

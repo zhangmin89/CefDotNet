@@ -6,6 +6,7 @@
     <RootNamespace>CefGlue.Tests</RootNamespace>
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <GenerateProgramFile>false</GenerateProgramFile>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CefGlueUseLocalRuntimeAssets>true</CefGlueUseLocalRuntimeAssets>
   </PropertyGroup>
