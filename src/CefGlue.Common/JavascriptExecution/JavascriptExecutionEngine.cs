@@ -26,7 +26,7 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
 
             public TaskCompletionSource<string> CompletionSource { get; }
 
-            public long StartedTimestamp { get; } = Stopwatch.GetTimestamp();
+            public long StartedTimestamp { get; } = JavascriptExecutionTrace.IsEnabled ? Stopwatch.GetTimestamp() : 0;
 
             public int ResultReceived;
         }
@@ -54,7 +54,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             var matched = _pendingTasks.TryRemove(message.TaskId, out var pendingTask);
             if (matched)
             {
-                Volatile.Write(ref pendingTask.ResultReceived, 1);
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    Volatile.Write(ref pendingTask.ResultReceived, 1);
+                }
                 if (message.Success)
                 {
                     pendingTask.CompletionSource.SetResult(message.ResultAsJson);
@@ -64,7 +67,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                     pendingTask.CompletionSource.SetException(new Exception(message.Exception));
                 }
             }
-            JavascriptExecutionTrace.Write(message.TaskId, args.Frame.Identifier, "browser-result-received", $"success={message.Success} matchedPending={matched}");
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(message.TaskId, args.Frame.Identifier, "browser-result-received", $"success={message.Success} matchedPending={matched}");
+            }
         }
 
         private void HandleContextCreatedMessage(MessageReceivedEventArgs args)
@@ -80,7 +86,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                 if (pendingTaskEntry.Value.FrameIdentifier == frameIdentifier && _pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
                 {
                     pendingTask.CompletionSource.TrySetCanceled();
-                    JavascriptExecutionTrace.Write(pendingTaskEntry.Key, frameIdentifier, "browser-context-released", "");
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(pendingTaskEntry.Key, frameIdentifier, "browser-context-released", "");
+                    }
                 }
             }
 
@@ -111,17 +120,26 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
 
             try
             {
-                JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
+                }
                 var cefMessage = message.ToCefProcessMessage();
                 frame.SendProcessMessage(CefProcessId.Renderer, cefMessage);
-                JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-returned", "");
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-returned", "");
+                }
 
                 return ProcessResult<T>(pendingEvaluation, taskId, timeout);
             }
             catch
             {
                 _pendingTasks.TryRemove(taskId, out var _);
-                JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-failed", "");
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-failed", "");
+                }
                 throw;
             }
         }
@@ -136,7 +154,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                 if (_pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
                 {
                     pendingTask.CompletionSource.TrySetCanceled();
-                    JavascriptExecutionTrace.Write(pendingTaskEntry.Key, pendingTask.FrameIdentifier, "browser-disposed", "");
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(pendingTaskEntry.Key, pendingTask.FrameIdentifier, "browser-disposed", "");
+                    }
                 }
             }
         }
@@ -148,12 +169,18 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             {
                 if (timeout.HasValue)
                 {
-                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-timeout-armed", FormattableString.Invariant($"timeoutMs={timeout.Value.TotalMilliseconds}"));
-                    var timeoutStarted = Stopwatch.GetTimestamp();
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-timeout-armed", FormattableString.Invariant($"timeoutMs={timeout.Value.TotalMilliseconds}"));
+                    }
+                    var timeoutStarted = JavascriptExecutionTrace.IsEnabled ? Stopwatch.GetTimestamp() : 0;
                     var completedTask = await Task.WhenAny(task, Task.Delay(timeout.Value)).ConfigureAwait(false);
                     if (completedTask != task)
                     {
-                        JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-timeout", FormattableString.Invariant($"timeoutMs={timeout.Value.TotalMilliseconds} timeoutElapsedMs={Stopwatch.GetElapsedTime(timeoutStarted).TotalMilliseconds:F3} evaluationElapsedMs={Stopwatch.GetElapsedTime(pendingEvaluation.StartedTimestamp).TotalMilliseconds:F3} resultReceived={Volatile.Read(ref pendingEvaluation.ResultReceived) != 0} taskStatus={task.Status}"));
+                        if (JavascriptExecutionTrace.IsEnabled)
+                        {
+                            JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-timeout", FormattableString.Invariant($"timeoutMs={timeout.Value.TotalMilliseconds} timeoutElapsedMs={Stopwatch.GetElapsedTime(timeoutStarted).TotalMilliseconds:F3} evaluationElapsedMs={Stopwatch.GetElapsedTime(pendingEvaluation.StartedTimestamp).TotalMilliseconds:F3} resultReceived={Volatile.Read(ref pendingEvaluation.ResultReceived) != 0} taskStatus={task.Status}"));
+                        }
                         throw new TaskCanceledException();
                     }
                 }
@@ -165,11 +192,17 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                 }
                 catch (TaskCanceledException)
                 {
-                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-cancelled", "");
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-cancelled", "");
+                    }
                     return default;
                 }
                 var result = Deserializer.Deserialize<T>(resultAsJson);
-                JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-result-consumed", FormattableString.Invariant($"evaluationElapsedMs={Stopwatch.GetElapsedTime(pendingEvaluation.StartedTimestamp).TotalMilliseconds:F3}"));
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-result-consumed", FormattableString.Invariant($"evaluationElapsedMs={Stopwatch.GetElapsedTime(pendingEvaluation.StartedTimestamp).TotalMilliseconds:F3}"));
+                }
                 return result;
             }
             finally

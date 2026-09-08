@@ -17,16 +17,25 @@ namespace Xilium.CefGlue.BrowserProcess.JavascriptExecution
         {
             var frame = args.Frame;
             var message = Messages.JsEvaluationRequest.FromCefMessage(args.Message);
-            var frameIdentifier = frame.Identifier;
-            JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-received", "");
+            var frameIdentifier = JavascriptExecutionTrace.IsEnabled ? frame.Identifier : 0;
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-received", "");
+            }
 
             using (var context = frame.V8Context.EnterOrFail())
             {
                 // send script to browser
-                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-start", "");
-                var evaluationStarted = Stopwatch.GetTimestamp();
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-start", "");
+                }
+                var evaluationStarted = JavascriptExecutionTrace.IsEnabled ? Stopwatch.GetTimestamp() : 0;
                 var success = context.V8Context.TryEval(JavascriptHelper.WrapScriptForEvaluation(message.Script), message.Url, message.Line, out var value, out var exception);
-                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-complete", FormattableString.Invariant($"success={success} executionElapsedMs={Stopwatch.GetElapsedTime(evaluationStarted).TotalMilliseconds:F3}"));
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-complete", FormattableString.Invariant($"success={success} executionElapsedMs={Stopwatch.GetElapsedTime(evaluationStarted).TotalMilliseconds:F3}"));
+                }
 
                 var response = new Messages.JsEvaluationResult()
                 {
@@ -37,9 +46,15 @@ namespace Xilium.CefGlue.BrowserProcess.JavascriptExecution
                 };
 
                 var cefResponseMessage = response.ToCefProcessMessage();
-                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-start", "");
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-start", "");
+                }
                 frame.SendProcessMessage(CefProcessId.Browser, cefResponseMessage);
-                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-returned", "");
+                if (JavascriptExecutionTrace.IsEnabled)
+                {
+                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-returned", "");
+                }
             }
         }
     }
