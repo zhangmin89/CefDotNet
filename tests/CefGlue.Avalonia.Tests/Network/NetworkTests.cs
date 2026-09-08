@@ -137,14 +137,11 @@ namespace CefGlue.Tests.Network
             var script = 
                 "fetch('https://tests/resource').then(response => {" +
                 "   let result = [ response.headers.get('Access-Control-Allow-Origin'), response.status, response.url ];" +
-                "   try {" +
-                "       if (response.status === 200) {" +
-                "           response.text().then(data => console.log(result.concat([ data ]).join('|')));" +
-                "           return;" +
-                "       }" +
-                "   } catch {}" +
+                "   if (response.status === 200) {" +
+                "       return response.text().then(data => console.log(result.concat([ data ]).join('|')));" +
+                "   }" +
                 "   console.log(result.concat([ '' ]).join('|'));" +
-                "})";
+                "}).catch(error => console.log(String(error)))";
             TestDiagnostics.Write(testName, "page-load-start");
             Browser.LoadContent("<html/>");
             TestDiagnostics.Write(testName, "page-load-returned");
