@@ -14,7 +14,7 @@ namespace Xilium.CefGlue.BrowserProcess.Helpers
         {
 #if NET5_0_OR_GREATER
             string extension = null;
-            var basePath = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, ".."));
+            var basePath = AppDomain.CurrentDomain.BaseDirectory;
 
             switch (CefRuntime.Platform)
             {

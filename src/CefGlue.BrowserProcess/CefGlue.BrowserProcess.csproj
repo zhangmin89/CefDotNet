@@ -11,6 +11,7 @@
     <UseAppHost>false</UseAppHost>
     <!-- 不把 .NET Runtime 自己打进去，而是依赖目标机器已有的 .NET Runtime-->
     <SelfContained>false</SelfContained>
+    <RollForward>Major</RollForward>
   </PropertyGroup>
 
   <ItemGroup>

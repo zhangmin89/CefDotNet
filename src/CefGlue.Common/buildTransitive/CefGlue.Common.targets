@@ -1,23 +1,27 @@
 <Project>
-    <Target Name="ValidateCefGlueRuntimeAssets" BeforeTargets="PrepareForBuild">
+    <Target Name="ResolveCefGlueRuntimeIdentifier" BeforeTargets="ProcessFrameworkReferences">
+        <PropertyGroup>
+            <!-- 执行时再读取 RID，此时项目与 SDK 的属性已经完成求值。 -->
+            <CefGlueTargetRuntimeIdentifier>$(RuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
+            <CefGlueTargetRuntimeIdentifier Condition="'$(CefGlueTargetRuntimeIdentifier)' == ''">$(DefaultAppHostRuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
+            <CefGlueTargetRuntimeIdentifier Condition="'$(CefGlueTargetRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
+            <CefGlueTargetRuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' and $(CefGlueTargetRuntimeIdentifier.StartsWith('win-')) and '$(PlatformTarget)' != '' and '$(PlatformTarget)' != 'AnyCPU'">win-$(PlatformTarget.ToLowerInvariant())</CefGlueTargetRuntimeIdentifier>
+            <!-- 子进程需要 apphost；主程序关闭 UseAppHost 时也让 SDK 解析相应的 host pack。 -->
+            <AppHostRuntimeIdentifier Condition="('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true') and '$(AppHostRuntimeIdentifier)' == ''">$(CefGlueTargetRuntimeIdentifier)</AppHostRuntimeIdentifier>
+        </PropertyGroup>
+    </Target>
+
+    <Target Name="ValidateCefGlueRuntimeAssets" BeforeTargets="PrepareForBuild" DependsOnTargets="ResolveCefGlueRuntimeIdentifier">
         <Error Condition="'$(CefGlueTargetRuntimeIdentifier)' != 'win-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'win-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-arm64'" Text="CefGlue supports win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64; resolved '$(CefGlueTargetRuntimeIdentifier)'. Set RuntimeIdentifier explicitly when cross-compiling." />
     </Target>
 
-    <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="$(CefGluePrepareRuntimeAssetsTargets)">
+    <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ValidateCefGlueRuntimeAssets;$(CefGluePrepareRuntimeAssetsTargets);CreateCefGlueBrowserProcessAppHost" Condition="'$(DesignTimeBuild)' != 'true'">
         <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'">
             <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSX64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64'" />
             <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSXARM64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'" />
-            <_CefGlueMacOSBrowserProcessLibrary Include="$(OutDir)libEGL.dylib;$(OutDir)libGLESv2.dylib;$(OutDir)libvk_swiftshader.dylib" />
             <None Include="@(_CefGlueMacOSRuntimeAsset)">
                 <Visible>false</Visible>
                 <Link>%(_CefGlueMacOSRuntimeAsset.RecursiveDir)%(_CefGlueMacOSRuntimeAsset.FileName)%(_CefGlueMacOSRuntimeAsset.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-                <PublishState>Included</PublishState>
-            </None>
-            <None Include="@(_CefGlueMacOSBrowserProcessLibrary)">
-                <Visible>false</Visible>
-                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueMacOSBrowserProcessLibrary.FileName)%(_CefGlueMacOSBrowserProcessLibrary.Extension)</Link>
                 <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
                 <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
@@ -29,7 +33,7 @@
             <_CefGlueLinuxRuntimeAsset Include="@(CefRedistLinuxARM64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'linux-arm64'" />
             <None Include="@(_CefGlueLinuxRuntimeAsset)">
                 <Visible>false</Visible>
-                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueLinuxRuntimeAsset.RecursiveDir)%(_CefGlueLinuxRuntimeAsset.FileName)%(_CefGlueLinuxRuntimeAsset.Extension)</Link>
+                <Link>%(_CefGlueLinuxRuntimeAsset.RecursiveDir)%(_CefGlueLinuxRuntimeAsset.FileName)%(_CefGlueLinuxRuntimeAsset.Extension)</Link>
                 <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
                 <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
@@ -37,14 +41,27 @@
         </ItemGroup>
 
         <ItemGroup>
-            <_CefGlueBrowserProcessAsset Include="$(CefGlueBrowserProcessAssetsPath)**\*" />
+            <!-- 共享 DLL 使用主程序已经解析的引用，避免同目录下重复复制和覆盖。 -->
+            <_CefGlueBrowserProcessAsset Include="$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.*" />
+            <_CefGlueBrowserProcessAsset Include="$(_CefGlueBrowserProcessAppHost)" Condition="'$(_CefGlueBrowserProcessAppHost)' != ''" />
             <None Include="@(_CefGlueBrowserProcessAsset)">
                 <Visible>false</Visible>
-                <Link>$(CefGlueBrowserProcessDirectoryName)\%(_CefGlueBrowserProcessAsset.RecursiveDir)%(_CefGlueBrowserProcessAsset.FileName)%(_CefGlueBrowserProcessAsset.Extension)</Link>
+                <Link>%(_CefGlueBrowserProcessAsset.FileName)%(_CefGlueBrowserProcessAsset.Extension)</Link>
                 <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
                 <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
                 <PublishState>Included</PublishState>
             </None>
+            <FileWrites Include="$(_CefGlueBrowserProcessAppHost)" Condition="'$(_CefGlueBrowserProcessAppHost)' != ''" />
+        </ItemGroup>
+    </Target>
+
+    <!-- BrowserProcess 独立运行，主程序发布为单文件时也需要保留这两个共享 DLL。 -->
+    <Target Name="KeepCefGlueBrowserProcessDependenciesExternal" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
+        <ItemGroup>
+            <ResolvedFileToPublish Update="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.FileName)' == 'Xilium.CefGlue' or '%(ResolvedFileToPublish.FileName)' == 'Xilium.CefGlue.Common.Shared'">
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            </ResolvedFileToPublish>
         </ItemGroup>
     </Target>
 
@@ -58,6 +75,8 @@
                 <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
+            <!-- 所选 CEF 资源已复制到主程序目录，移除 SDK 默认复制的两套 Windows runtimes 资源。 -->
+            <RuntimeTargetsCopyLocalItems Remove="@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-x64'));@(RuntimeTargetsCopyLocalItems->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-arm64'))" />
             <_CefGlueWindowsLocale Include="@(CefRuntimeWin64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-x64'" />
             <_CefGlueWindowsLocale Include="@(CefRuntimeWinArm64Locales)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'win-arm64'" />
             <None Include="@(_CefGlueWindowsLocale)">
@@ -145,29 +164,26 @@
         </Code>
         </Task>
     </UsingTask>
-    <Target Name="CreateCefGlueBrowserProcessAppHost" AfterTargets="ComputeFilesToPublish" DependsOnTargets="_GetAppHostPaths" Condition="'$(_IsExecutable)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(CefGlueUseLocalRuntimeAssets)' != 'true'">
+    <Target Name="PrepareCefGlueBrowserProcessAppHost" DependsOnTargets="ValidateCefGlueRuntimeAssets;$(CefGluePrepareRuntimeAssetsTargets);ResolveFrameworkReferences" Condition="('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true') and '$(DesignTimeBuild)' != 'true'">
         <PropertyGroup>
             <!-- 都不要换行 -->
-            <_CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</_CefGlueBrowserProcessExecutableName>
+            <_CefGlueBrowserProcessExecutableName Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</_CefGlueBrowserProcessExecutableName>
             <_CefGlueBrowserProcessExecutableName Condition="'$(_CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</_CefGlueBrowserProcessExecutableName>
-            <_CefGlueBrowserProcessIntermediateDirectory>$(IntermediateOutputPath)cefglue-browser-process\</_CefGlueBrowserProcessIntermediateDirectory>
+            <_CefGlueBrowserProcessIntermediateDirectory>$(IntermediateOutputPath)cefglue-browser-process\$(CefGlueTargetRuntimeIdentifier)\</_CefGlueBrowserProcessIntermediateDirectory>
             <_CefGlueBrowserProcessAppHost>$(_CefGlueBrowserProcessIntermediateDirectory)$(_CefGlueBrowserProcessExecutableName)</_CefGlueBrowserProcessAppHost>
             <_CefGlueBrowserProcessAssembly>$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.dll</_CefGlueBrowserProcessAssembly>
             <_CefGlueBrowserProcessWindowsGui>false</_CefGlueBrowserProcessWindowsGui>
-            <_CefGlueBrowserProcessWindowsGui Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))">true</_CefGlueBrowserProcessWindowsGui>
+            <_CefGlueBrowserProcessWindowsGui Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))">true</_CefGlueBrowserProcessWindowsGui>
+            <_CefGlueBrowserProcessMacOSCodeSign>false</_CefGlueBrowserProcessMacOSCodeSign>
+            <_CefGlueBrowserProcessMacOSCodeSign Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('osx-'))">true</_CefGlueBrowserProcessMacOSCodeSign>
         </PropertyGroup>
-        <Error Condition="'$(AppHostSourcePath)' == '' or !Exists('$(AppHostSourcePath)')" Text="Unable to resolve apphost for RuntimeIdentifier '$(RuntimeIdentifier)'." />
+        <Error Condition="'$(AppHostSourcePath)' == '' or !Exists('$(AppHostSourcePath)')" Text="Unable to resolve apphost for RuntimeIdentifier '$(CefGlueTargetRuntimeIdentifier)'." />
         <Error Condition="!Exists('$(_CefGlueBrowserProcessAssembly)')" Text="CefGlue BrowserProcess assembly was not found: $(_CefGlueBrowserProcessAssembly)" />
+    </Target>
+
+    <Target Name="CreateCefGlueBrowserProcessAppHost" DependsOnTargets="PrepareCefGlueBrowserProcessAppHost" Inputs="$(_CefGlueBrowserProcessAssembly);$(AppHostSourcePath);$(MSBuildAllProjects)" Outputs="$(_CefGlueBrowserProcessAppHost)" Condition="('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true') and '$(DesignTimeBuild)' != 'true'">
         <MakeDir Directories="$(_CefGlueBrowserProcessIntermediateDirectory)" />
-        <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(_CefGlueBrowserProcessAppHost)" AppBinaryName="Xilium.CefGlue.BrowserProcess.dll" IntermediateAssembly="$(_CefGlueBrowserProcessAssembly)" WindowsGraphicalUserInterface="$(_CefGlueBrowserProcessWindowsGui)" Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
-        <PatchPeStackReserve Condition="$([System.String]::Copy('$(RuntimeIdentifier)').StartsWith('win-'))" FilePath="$(_CefGlueBrowserProcessAppHost)" StackReserveBytes="8388608" />
-        <ItemGroup>
-            <!-- 都不要换行 -->
-            <ResolvedFileToPublish Include="$(_CefGlueBrowserProcessAppHost)">
-                <RelativePath>$(CefGlueBrowserProcessDirectoryName)\$(_CefGlueBrowserProcessExecutableName)</RelativePath>
-                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
-            </ResolvedFileToPublish>
-        </ItemGroup>
+        <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(_CefGlueBrowserProcessAppHost)" AppBinaryName="Xilium.CefGlue.BrowserProcess.dll" IntermediateAssembly="$(_CefGlueBrowserProcessAssembly)" WindowsGraphicalUserInterface="$(_CefGlueBrowserProcessWindowsGui)" EnableMacOSCodeSign="$(_CefGlueBrowserProcessMacOSCodeSign)" Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
+        <PatchPeStackReserve Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))" FilePath="$(_CefGlueBrowserProcessAppHost)" StackReserveBytes="8388608" />
     </Target>
 </Project>

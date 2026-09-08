@@ -11,23 +11,32 @@
 
     <!-- NuGet 自动导入 buildTransitive；仓库内的示例和测试通过同一份目标消费本地产物。 -->
     <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-        <CefGluePrepareRuntimeAssetsTargets>PublishCefGlueBrowserProcessForLocalBuild</CefGluePrepareRuntimeAssetsTargets>
+        <CefGluePrepareRuntimeAssetsTargets>ResolveCefGlueBrowserProcessProjectAssets</CefGluePrepareRuntimeAssetsTargets>
     </PropertyGroup>
 
     <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.props" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
 
-    <PropertyGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-        <CefGlueBrowserProcessAssetsPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\browser-process\local\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)\'))</CefGlueBrowserProcessAssetsPath>
-        <CefGlueBrowserProcessBuildArtifactsPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)artifacts\browser-process\local-build\$(MSBuildProjectName)\$(Configuration)\$(CefGlueTargetRuntimeIdentifier)'))</CefGlueBrowserProcessBuildArtifactsPath>
-        <CefGlueBrowserProcessExecutableName Condition="$([System.String]::Copy('$(CefGlueTargetRuntimeIdentifier)').StartsWith('win-'))">Xilium.CefGlue.BrowserProcess.exe</CefGlueBrowserProcessExecutableName>
-        <CefGlueBrowserProcessExecutableName Condition="'$(CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</CefGlueBrowserProcessExecutableName>
-    </PropertyGroup>
+    <!-- SDK 会清除引用项目的 RID；保留主程序的 artifacts 目录维度，避免切换架构时复用依赖输出。 -->
+    <ItemGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true' and '$(UseArtifactsOutput)' == 'true'">
+        <ProjectReference Update="@(ProjectReference)" AdditionalProperties="%(ProjectReference.AdditionalProperties);ArtifactsPivots=$(ArtifactsPivots)_$(PlatformTarget.ToLowerInvariant())" />
+    </ItemGroup>
+
+    <!-- 源码消费与打包使用同一个 AnyCPU 构建依赖，输出不作为主程序的程序集引用。 -->
+    <ItemGroup Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true' or '$(MSBuildProjectName)' == 'CefGlue.Common'">
+        <ProjectReference Include="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" ReferenceOutputAssembly="false" Private="false" PrivateAssets="all" OutputItemType="_CefGlueBrowserProcessProjectOutput">
+            <GlobalPropertiesToRemove>RuntimeIdentifier;RuntimeIdentifiers;Platform;PlatformTarget;SelfContained;PublishSelfContained;UseAppHost;PublishSingleFile;PublishReadyToRun;PublishAot;OutputPath;OutDir;PublishDir;CefGlueUseLocalRuntimeAssets</GlobalPropertiesToRemove>
+            <!-- SDK 的 artifacts 目录默认不区分 Platform，隔离整条 AnyCPU 依赖链的中间文件和输出。 -->
+            <AdditionalProperties>Platform=AnyCPU;ArtifactsPivots=$(Configuration.ToLowerInvariant())_browser-process</AdditionalProperties>
+        </ProjectReference>
+    </ItemGroup>
 
     <Import Project="$(MSBuildThisFileDirectory)src\CefGlue.Common\buildTransitive\CefGlue.Common.targets" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'" />
 
-    <Target Name="PublishCefGlueBrowserProcessForLocalBuild" Condition="'$(CefGlueUseLocalRuntimeAssets)' == 'true'">
-        <!-- Isolate every consumer's BrowserProcess build graph so nested publishes can run concurrently. -->
-        <MSBuild Projects="$(MSBuildThisFileDirectory)src\CefGlue.BrowserProcess\CefGlue.BrowserProcess.csproj" Targets="Restore;Publish" Properties="Configuration=$(Configuration);RuntimeIdentifier=$(CefGlueTargetRuntimeIdentifier);SelfContained=true;UseAppHost=true;ArtifactsPath=$(CefGlueBrowserProcessBuildArtifactsPath);PublishDir=$(CefGlueBrowserProcessAssetsPath)" />
-        <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)')" Text="CefGlue browser process publish did not produce '$(CefGlueBrowserProcessAssetsPath)$(CefGlueBrowserProcessExecutableName)'." />
+    <Target Name="ResolveCefGlueBrowserProcessProjectAssets" DependsOnTargets="ResolveProjectReferences">
+        <Error Condition="'@(_CefGlueBrowserProcessProjectOutput)' == ''" Text="CefGlue BrowserProcess project output was not resolved." />
+        <PropertyGroup>
+            <CefGlueBrowserProcessAssetsPath>@(_CefGlueBrowserProcessProjectOutput->'%(RootDir)%(Directory)')</CefGlueBrowserProcessAssetsPath>
+        </PropertyGroup>
+        <Error Condition="!Exists('$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.dll')" Text="Portable CefGlue BrowserProcess build did not produce Xilium.CefGlue.BrowserProcess.dll." />
     </Target>
 </Project>

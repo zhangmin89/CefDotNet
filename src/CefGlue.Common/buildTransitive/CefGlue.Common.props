@@ -1,10 +1,6 @@
 <Project>
     <PropertyGroup>
-        <!--publish -r xxx 时使用用户指定的 RID。普通 build / F5 时没有 RID，则使用当前 SDK 所在平台。-->
-        <CefGlueTargetRuntimeIdentifier Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
-        <CefGlueTargetRuntimeIdentifier Condition="'$(CefGlueTargetRuntimeIdentifier)' == ''">$(NETCoreSdkRuntimeIdentifier)</CefGlueTargetRuntimeIdentifier>
         <!--BrowserProcess 现在是 portable managed assets，所以不再有 win-x64/linux-x64/... 子目录。-->
         <CefGlueBrowserProcessAssetsPath Condition="'$(CefGlueBrowserProcessAssetsPath)' == ''">$(MSBuildThisFileDirectory)..\tools\browser-process\</CefGlueBrowserProcessAssetsPath>
-        <CefGlueBrowserProcessDirectoryName>CefGlueBrowserProcess</CefGlueBrowserProcessDirectoryName>
     </PropertyGroup>
 </Project>

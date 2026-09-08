@@ -11,8 +11,6 @@ namespace Xilium.CefGlue.Common
 {
     public static class CefRuntimeLoader
     {
-        private const string DefaultBrowserProcessDirectory = "CefGlueBrowserProcess";
-
         private static readonly object InitializationLock = new object();
         private static Action<BrowserProcessHandler> _delayedInitialization;
 
@@ -109,12 +107,10 @@ namespace Xilium.CefGlue.Common
 
         private static IEnumerable<string> GetSubProcessPaths(string baseDirectory)
         {
-            yield return Path.Combine(baseDirectory, DefaultBrowserProcessDirectory, BrowserProcessFileName);
             yield return Path.Combine(baseDirectory, BrowserProcessFileName);
 
             // The executing DLL might not be in the current domain directory (plugins scenario)
             baseDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            yield return Path.Combine(baseDirectory, DefaultBrowserProcessDirectory, BrowserProcessFileName);
             yield return Path.Combine(baseDirectory, BrowserProcessFileName);
         }
 
