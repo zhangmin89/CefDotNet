@@ -16,14 +16,15 @@
     </Target>
 
     <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ValidateCefGlueRuntimeAssets;$(CefGluePrepareRuntimeAssetsTargets);CreateCefGlueBrowserProcessAppHost" Condition="'$(DesignTimeBuild)' != 'true'">
+        <!-- 切换架构时，新选中的资源和缓存 apphost 可能更旧；必须按当前来源复制。 -->
         <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'">
             <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSX64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64'" />
             <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSXARM64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'" />
             <None Include="@(_CefGlueMacOSRuntimeAsset)">
                 <Visible>false</Visible>
                 <Link>%(_CefGlueMacOSRuntimeAsset.RecursiveDir)%(_CefGlueMacOSRuntimeAsset.FileName)%(_CefGlueMacOSRuntimeAsset.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
         </ItemGroup>
@@ -34,8 +35,8 @@
             <None Include="@(_CefGlueLinuxRuntimeAsset)">
                 <Visible>false</Visible>
                 <Link>%(_CefGlueLinuxRuntimeAsset.RecursiveDir)%(_CefGlueLinuxRuntimeAsset.FileName)%(_CefGlueLinuxRuntimeAsset.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
         </ItemGroup>
@@ -47,8 +48,8 @@
             <None Include="@(_CefGlueBrowserProcessAsset)">
                 <Visible>false</Visible>
                 <Link>%(_CefGlueBrowserProcessAsset.FileName)%(_CefGlueBrowserProcessAsset.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
                 <PublishState>Included</PublishState>
             </None>
@@ -71,8 +72,8 @@
             <None Include="@(CefRuntimeFiles)">
                 <Visible>false</Visible>
                 <Link>%(CefRuntimeFiles.FileName)%(CefRuntimeFiles.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
             <!-- 所选 CEF 资源已复制到主程序目录，移除 SDK 默认复制的两套 Windows runtimes 资源。 -->
@@ -82,10 +83,17 @@
             <None Include="@(_CefGlueWindowsLocale)">
                 <Visible>false</Visible>
                 <Link>locales\%(_CefGlueWindowsLocale.RecursiveDir)%(_CefGlueWindowsLocale.FileName)%(_CefGlueWindowsLocale.Extension)</Link>
-                <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-                <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+                <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <PublishState>Included</PublishState>
             </None>
+        </ItemGroup>
+    </Target>
+
+    <!-- 显式 RID 的 Windows native 文件由 SDK 收集，发布时也不能仅按源文件是否更新判断。 -->
+    <Target Name="RefreshCefRuntimePublishAssets" AfterTargets="ComputeResolvedFilesToPublishList">
+        <ItemGroup>
+            <ResolvedFileToPublish Update="@(ResolvedFileToPublish->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-x64'));@(ResolvedFileToPublish->WithMetadataValue('NuGetPackageId', 'chromiumembeddedframework.runtime.win-arm64'))" CopyToPublishDirectory="Always" />
         </ItemGroup>
     </Target>
 
