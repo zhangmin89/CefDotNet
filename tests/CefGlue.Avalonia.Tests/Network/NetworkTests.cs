@@ -15,6 +15,7 @@ namespace CefGlue.Tests.Network
     {
         private class TestsRequestHandler : RequestHandler
         {
+            private readonly string _testName = TestContext.CurrentContext.Test.FullName;
             private readonly TestsResourceRequestHandler _resourceRequestHandler;
 
             public TestsRequestHandler(Func<CefRequest, DefaultResourceHandler> resourceHandler)
@@ -24,12 +25,14 @@ namespace CefGlue.Tests.Network
 
             protected override CefResourceRequestHandler GetResourceRequestHandler(CefBrowser browser, CefFrame frame, CefRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
             {
+                TestDiagnostics.Write(_testName, "request-handler-called");
                 return _resourceRequestHandler;
             }
         }
 
         private class TestsResourceRequestHandler : CefResourceRequestHandler
         {
+            private readonly string _testName = TestContext.CurrentContext.Test.FullName;
             private readonly Func<CefRequest, DefaultResourceHandler> _resourceHandler;
 
             public TestsResourceRequestHandler(Func<CefRequest, DefaultResourceHandler> resourceHandler)
@@ -44,7 +47,10 @@ namespace CefGlue.Tests.Network
 
             protected override CefResourceHandler GetResourceHandler(CefBrowser browser, CefFrame frame, CefRequest request)
             {
-                return _resourceHandler(request);
+                TestDiagnostics.Write(_testName, "resource-handler-start");
+                var handler = _resourceHandler(request);
+                TestDiagnostics.Write(_testName, "resource-handler-returned");
+                return handler;
             }
         }
 
@@ -96,12 +102,16 @@ namespace CefGlue.Tests.Network
 
         private Task<Response> GetResponse()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "response-start");
             var taskCompletion = new TaskCompletionSource<Response>();
 
             Browser.ConsoleMessage += OnConsoleMessage;
+            TestDiagnostics.Write(testName, "console-handler-attached");
 
             void OnConsoleMessage(object sender, ConsoleMessageEventArgs message)
             {
+                TestDiagnostics.Write(testName, "console-message-received");
                 Browser.ConsoleMessage -= OnConsoleMessage;
                 var messageParts = message.Message.Split("|");
                 if (messageParts.Length == 4)
@@ -121,6 +131,7 @@ namespace CefGlue.Tests.Network
                         Data = message.Message
                     });
                 }
+                TestDiagnostics.Write(testName, "response-signalled");
             }
 
             var script = 
@@ -134,12 +145,18 @@ namespace CefGlue.Tests.Network
                 "   } catch {}" +
                 "   console.log(result.concat([ '' ]).join('|'));" +
                 "})";
+            TestDiagnostics.Write(testName, "page-load-start");
             Browser.LoadContent("<html/>");
-            EvaluateJavascript<int>(script);
+            TestDiagnostics.Write(testName, "page-load-returned");
+            TestDiagnostics.Write(testName, "fetch-script-start");
+            var evaluation = EvaluateJavascript<int>(script);
+            _ = evaluation.ContinueWith(task => TestDiagnostics.Write(testName, "fetch-script-complete", $"status={task.Status}"), TaskScheduler.Default);
+            TestDiagnostics.Write(testName, "response-wait");
 
             return taskCompletion.Task.ContinueWith(t =>
             {
                 Browser.ConsoleMessage -= OnConsoleMessage;
+                TestDiagnostics.Write(testName, "response-complete");
                 return t.Result;
             });
         }
@@ -165,11 +182,14 @@ namespace CefGlue.Tests.Network
         [Test]
         public async Task ResourceHandlerIsCalledWithError()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "test-body-start");
             Browser.RequestHandler = new TestsRequestHandler(_ => new DefaultResourceHandler());
 
             var response = await GetResponse();
 
             StringAssert.Contains("Error", response.Data);
+            TestDiagnostics.Write(testName, "test-body-complete");
         }
 
         [Test]

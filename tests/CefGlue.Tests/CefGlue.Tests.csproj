@@ -30,6 +30,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../TestInfrastructure/TestProgressAttribute.cs" Link="TestInfrastructure/TestProgressAttribute.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\CefGlue.Common.Shared\CefGlue.Common.Shared.csproj" />
     <ProjectReference Include="..\..\src\CefGlue.Common\CefGlue.Common.csproj" />
     <ProjectReference Include="..\..\src\CefGlue\CefGlue.csproj" />

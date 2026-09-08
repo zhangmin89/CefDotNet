@@ -79,16 +79,22 @@ namespace CefGlue.Tests
         [SetUp]
         protected virtual async Task Setup()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "setup-start");
             await InternalSetup(() => new AvaloniaCefBrowser());
 
+            TestDiagnostics.Write(testName, "extra-setup-start");
             await ExtraSetup();
+            TestDiagnostics.Write(testName, "setup-complete");
         }
 
         protected async Task InternalSetup(Func<AvaloniaCefBrowser> avaloniaCefBrowserFactory)
         {
             var testName = TestContext.CurrentContext.Test.FullName; // capture test name outside the async part (otherwise wont work properly)
+            TestDiagnostics.Write(testName, "ui-setup-queued");
             await Run(async () =>
             {
+                TestDiagnostics.Write(testName, "ui-setup-start");
                 if (window == null)
                 {
                     window = new Window();
@@ -96,17 +102,25 @@ namespace CefGlue.Tests
                     window.Height = 1;
 
                     window.Show();
+                    TestDiagnostics.Write(testName, "window-shown");
                 }
 
                 window.Title = testName;
 
                 var browserInitTaskCompletionSource = new TaskCompletionSource<bool>();
                 browser = avaloniaCefBrowserFactory();
-                browser.BrowserInitialized += delegate () { browserInitTaskCompletionSource.SetResult(true); };
+                TestDiagnostics.Write(testName, "browser-created");
+                browser.BrowserInitialized += delegate ()
+                {
+                    TestDiagnostics.Write(testName, "browser-initialized");
+                    browserInitTaskCompletionSource.SetResult(true);
+                };
 
                 window.Content = browser;
 
+                TestDiagnostics.Write(testName, "browser-initialization-wait");
                 await browserInitTaskCompletionSource.Task;
+                TestDiagnostics.Write(testName, "ui-setup-complete");
             });
         }
 
@@ -118,15 +132,22 @@ namespace CefGlue.Tests
         [TearDown] 
         protected void TearDown()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "teardown-start");
             browser?.Dispose();
+            TestDiagnostics.Write(testName, "teardown-complete");
         }
 
         [OneTimeTearDown]
         protected async Task OneTimeTearDown()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "fixture-teardown-queued");
             await Run(() => {
+                TestDiagnostics.Write(testName, "fixture-teardown-start");
                 window?.Close();
                 window = null;
+                TestDiagnostics.Write(testName, "fixture-teardown-complete");
             });
         }
 

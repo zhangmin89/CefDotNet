@@ -23,7 +23,8 @@ namespace CefGlue.Tests
                 // Match the test output directory used by VSTest for relative CEF cache paths.
                 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
                 TestBase.InitializeApplication();
-                using var lifetime = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+                // The CI process monitor collects diagnostics before enforcing the timeout.
+                using var lifetime = new CancellationTokenSource();
                 var tests = Task.Run(() =>
                 {
                     var runner = new NUnitTestAssemblyRunner(new DefaultTestAssemblyBuilder());
@@ -37,11 +38,6 @@ namespace CefGlue.Tests
                 _ = tests.ContinueWith(_ => Dispatcher.UIThread.Post(lifetime.Cancel), TaskScheduler.Default);
 
                 Dispatcher.UIThread.MainLoop(lifetime.Token);
-                if (!tests.IsCompleted)
-                {
-                    Console.Error.WriteLine("Avalonia tests exceeded the 10 minute timeout.");
-                    return 1;
-                }
                 return tests.GetAwaiter().GetResult();
             }
             catch (Exception exception)

@@ -49,6 +49,7 @@
 
   <ItemGroup>
     <Compile Include="..\TestInfrastructure\CefRunContextMenuCallbackHarness.cs" Link="TestInfrastructure\CefRunContextMenuCallbackHarness.cs" />
+    <Compile Include="../TestInfrastructure/TestProgressAttribute.cs" Link="TestInfrastructure/TestProgressAttribute.cs" />
   </ItemGroup>
 
 </Project>
