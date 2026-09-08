@@ -7,8 +7,8 @@
 
     <!-- 把 CefGlue.Common 的两个 buildTransitive 文件装进 nupkg -->
     <ItemGroup>
-        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.props" Pack="true" PackagePath="buildTransitive\CefGlue.Common.props" />
-        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.targets" Pack="true" PackagePath="buildTransitive\CefGlue.Common.targets" />
+        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.props" Pack="true" PackagePath="buildTransitive/CefGlue.Common.props" />
+        <None Include="$(MSBuildProjectDirectory)\buildTransitive\CefGlue.Common.targets" Pack="true" PackagePath="buildTransitive/CefGlue.Common.targets" />
     </ItemGroup>
 
     <!-- 原本就有的 ProjectReference 打包逻辑 -->
@@ -21,7 +21,7 @@
     <Target Name="CollectBrowserProcessesForPackage" DependsOnTargets="ResolveCefGlueBrowserProcessProjectAssets">
         <ItemGroup>
             <TfmSpecificPackageFile Include="$(CefGlueBrowserProcessAssetsPath)*.dll;$(CefGlueBrowserProcessAssetsPath)*.pdb;$(CefGlueBrowserProcessAssetsPath)*.deps.json;$(CefGlueBrowserProcessAssetsPath)*.runtimeconfig.json">
-                <PackagePath>tools\browser-process\%(FileName)%(Extension)</PackagePath>
+                <PackagePath>tools/browser-process/%(FileName)%(Extension)</PackagePath>
             </TfmSpecificPackageFile>
         </ItemGroup>
     </Target>

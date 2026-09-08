@@ -9,35 +9,18 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: windows-latest
-    timeout-minutes: 20
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: '10.0.400'
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build -c Release --no-restore
-
-      - name: Test
-        run: dotnet test -c Release --no-build --filter 'TestCategory!=BuildIntegration' --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
-
-  browser-process-regression:
-    name: BrowserProcess (${{ matrix.os }})
+    name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-22.04, ubuntu-22.04-arm, macos-15-intel, macos-15]
+        os: [windows-latest, windows-11-arm, ubuntu-22.04, ubuntu-22.04-arm, macos-15-intel, macos-15]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CI_SOLUTION: ${{ runner.os == 'Windows' && 'CefDotNet.slnx' || 'CefDotNet.CrossPlatform.slnf' }}
 
     steps:
       - name: Checkout repository
@@ -52,24 +35,21 @@ jobs:
 
       - name: Install Linux browser prerequisites
         if: runner.os == 'Linux'
+        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install --yes xvfb libgtk-3-0 libnss3 libasound2
 
-      - name: Test BrowserProcess on Linux
+      - name: Restore
+        run: dotnet restore $env:CI_SOLUTION
+
+      - name: Build
+        run: dotnet build $env:CI_SOLUTION -c Release --no-restore -m:1
+
+      - name: Test on Linux
         if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum dotnet test tests/CefGlue.Tests/CefGlue.Tests.csproj -c Release --filter TestCategory=BuildIntegration --logger 'trx;LogFileName=build-integration.trx' --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
+        run: xvfb-run --auto-servernum dotnet test $env:CI_SOLUTION -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
 
-      - name: Test BrowserProcess on Windows and macOS
+      - name: Test on Windows and macOS
         if: runner.os != 'Linux'
-        shell: pwsh
-        run: dotnet test tests/CefGlue.Tests/CefGlue.Tests.csproj -c Release --filter TestCategory=BuildIntegration --logger 'trx;LogFileName=build-integration.trx' --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none
-
-      - name: Test real browser JavaScript on Linux
-        if: runner.os == 'Linux'
-        run: xvfb-run --auto-servernum dotnet test tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj -c Release --filter FullyQualifiedName=CefGlue.Tests.Javascript.JavascriptEvaluationTests.NumberReturn --logger 'trx;LogFileName=browser-smoke.trx' --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
-
-      - name: Test real browser JavaScript on Windows and macOS
-        if: runner.os != 'Linux'
-        shell: pwsh
-        run: dotnet test tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj -c Release --filter FullyQualifiedName=CefGlue.Tests.Javascript.JavascriptEvaluationTests.NumberReturn --logger 'trx;LogFileName=browser-smoke.trx' --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 2m --blame-hang-dump-type none
+        run: dotnet test $env:CI_SOLUTION -c Release --no-build -m:1 --logger trx --results-directory artifacts/test-results --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none

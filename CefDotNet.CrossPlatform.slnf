@@ -1,0 +1,15 @@
+{
+  "solution": {
+    "path": "CefDotNet.slnx",
+    "projects": [
+      "src\\CefGlue\\CefGlue.csproj",
+      "src\\CefGlue.Avalonia\\CefGlue.Avalonia.csproj",
+      "src\\CefGlue.BrowserProcess\\CefGlue.BrowserProcess.csproj",
+      "src\\CefGlue.Common\\CefGlue.Common.csproj",
+      "src\\CefGlue.Common.Shared\\CefGlue.Common.Shared.csproj",
+      "src\\CefGlue.Demo.Avalonia\\CefGlue.Demo.Avalonia.csproj",
+      "tests\\CefGlue.Avalonia.Tests\\CefGlue.Avalonia.Tests.csproj",
+      "tests\\CefGlue.Tests\\CefGlue.Tests.csproj"
+    ]
+  }
+}

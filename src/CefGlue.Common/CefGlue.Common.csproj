@@ -25,10 +25,10 @@
         <PackageReference Include="chromiumembeddedframework.runtime" />
         <PackageReference Include="chromiumembeddedframework.runtime.win-x64" />
         <PackageReference Include="chromiumembeddedframework.runtime.win-arm64" />
-        <PackageReference Include="cef.redist.linux64" />
-        <PackageReference Include="cef.redist.linuxarm64" />
-        <PackageReference Include="cef.redist.osx64" />
-        <PackageReference Include="cef.redist.osx.arm64" />
+        <PackageReference Include="cef.redist.linux64" PrivateAssets="contentfiles;analyzers" />
+        <PackageReference Include="cef.redist.linuxarm64" PrivateAssets="contentfiles;analyzers" />
+        <PackageReference Include="cef.redist.osx64" PrivateAssets="contentfiles;analyzers" />
+        <PackageReference Include="cef.redist.osx.arm64" PrivateAssets="contentfiles;analyzers" />
     </ItemGroup>
 
     <ItemGroup>
