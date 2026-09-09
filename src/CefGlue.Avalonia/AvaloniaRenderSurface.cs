@@ -25,8 +25,12 @@ namespace Xilium.CefGlue.Avalonia
         public override void Dispose()
         {
             base.Dispose();
-            _bitmap?.Dispose();
-            _bitmap = null;
+            Dispatcher.UIThread.Post(() =>
+            {
+                Image.Source = null;
+                _bitmap?.Dispose();
+                _bitmap = null;
+            });
         }
 
         private Image Image { get; }

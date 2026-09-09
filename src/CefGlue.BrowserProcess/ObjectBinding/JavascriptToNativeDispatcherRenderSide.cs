@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Xilium.CefGlue.Common.Shared.Helpers;
 using Xilium.CefGlue.Common.Shared.RendererProcessCommunication;
@@ -13,9 +14,10 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
 
         private readonly object _registrationSyncRoot = new object();
         private readonly object _pendingBoundPromiseSyncRoot = new object();
-        private readonly Dictionary<string, ObjectRegistrationInfo> _registeredObjects = new Dictionary<string, ObjectRegistrationInfo>();
+        private readonly Dictionary<(int BrowserIdentifier, string ObjectName), ObjectRegistrationInfo> _registeredObjects = new Dictionary<(int BrowserIdentifier, string ObjectName), ObjectRegistrationInfo>();
+        private readonly Dictionary<int, int> _browserInstanceCounts = new Dictionary<int, int>();
         private readonly ConcurrentDictionary<int, PromiseHolder> _pendingCalls = new ConcurrentDictionary<int, PromiseHolder>();
-        private readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> _pendingBoundQueryTasks = new ConcurrentDictionary<string, TaskCompletionSource<bool>>();
+        private readonly ConcurrentDictionary<(int BrowserIdentifier, string ObjectName), TaskCompletionSource<bool>> _pendingBoundQueryTasks = new ConcurrentDictionary<(int BrowserIdentifier, string ObjectName), TaskCompletionSource<bool>>();
         private readonly Dictionary<PromiseHolder, byte> _pendingBoundPromises = new Dictionary<PromiseHolder, byte>();
         
         public JavascriptToNativeDispatcherRenderSide(MessageDispatcher dispatcher)
@@ -31,16 +33,18 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
         {
             var message = Messages.NativeObjectRegistrationRequest.FromCefMessage(args.Message);
             var objectInfo = new ObjectRegistrationInfo(message.ObjectName, message.MethodsNames);
+            var browserIdentifier = args.Browser.Identifier;
+            var key = (browserIdentifier, objectInfo.Name);
 
             lock (_registrationSyncRoot)
             {
-                if (_registeredObjects.ContainsKey(objectInfo.Name))
+                if (_registeredObjects.ContainsKey(key))
                 {
                     return;
                 }
 
-                _registeredObjects.Add(objectInfo.Name, objectInfo);
-                _pendingBoundQueryTasks.GetOrAdd(objectInfo.Name, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+                _registeredObjects.Add(key, objectInfo);
+                _pendingBoundQueryTasks.GetOrAdd(key, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
 
                 // register objects in the main frame
                 var frame = args.Browser.GetMainFrame();
@@ -52,14 +56,14 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                     return;
                 }
 
-                CreateNativeObjectsAndCompletePendingQueries(new[] { objectInfo }, context);
+                CreateNativeObjectsAndCompletePendingQueries(new[] { objectInfo }, context, browserIdentifier);
             }
         }
 
         private void HandleNativeObjectUnregistration(MessageReceivedEventArgs args)
         {
             var message = Messages.NativeObjectUnregistrationRequest.FromCefMessage(args.Message);
-            if (!RemoveNativeObjectRegistration(message.ObjectName))
+            if (!RemoveNativeObjectRegistration(args.Browser.Identifier, message.ObjectName))
             {
                 return;
             }
@@ -79,38 +83,55 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
 
         private PromiseHolder HandleNativeObjectCall(Messages.NativeObjectCallRequest message)
         {
+            return HandleNativeObjectCall(message, CefV8Context.GetCurrentContext());
+        }
+
+        private PromiseHolder HandleNativeObjectCall(Messages.NativeObjectCallRequest message, CefV8Context v8Context)
+        {
             message.CallId = callIds.GetNext();
-
-            using (var context = CefV8Context.GetCurrentContext().EnterOrFail(shallDispose: false)) // context will be released when promise is resolved
+            var contextRetained = false;
+            try
             {
-                var frame = context.V8Context.GetFrame();
-                if (frame == null)
+                using (var context = v8Context.EnterOrFail(shallDispose: false)) // context will be released when promise is resolved
                 {
-                    // TODO, what now?
-                    return null;
-                }
-
-                var promiseHolder = context.V8Context.CreatePromise();
-                if (!_pendingCalls.TryAdd(message.CallId, promiseHolder))
-                {
-                    throw new InvalidOperationException("Call id already exists");
-                }
-
-                var cefMessage = message.ToCefProcessMessage();
-                try
-                {
-                    frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
-                }
-                catch
-                {
-                    if (_pendingCalls.TryRemove(message.CallId, out var pendingCall))
+                    var frame = context.V8Context.GetFrame();
+                    if (frame == null)
                     {
-                        ReleasePromiseHolder(pendingCall);
+                        // TODO, what now?
+                        return null;
                     }
-                    throw;
-                }
 
-                return promiseHolder;
+                    var promiseHolder = context.V8Context.CreatePromise();
+                    if (!_pendingCalls.TryAdd(message.CallId, promiseHolder))
+                    {
+                        promiseHolder.Dispose();
+                        throw new InvalidOperationException("Call id already exists");
+                    }
+
+                    try
+                    {
+                        var cefMessage = message.ToCefProcessMessage();
+                        frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
+                    }
+                    catch
+                    {
+                        if (_pendingCalls.TryRemove(message.CallId, out var pendingCall))
+                        {
+                            pendingCall.Dispose();
+                        }
+                        throw;
+                    }
+
+                    contextRetained = true;
+                    return promiseHolder;
+                }
+            }
+            finally
+            {
+                if (!contextRetained)
+                {
+                    v8Context.Dispose();
+                }
             }
         }
 
@@ -139,13 +160,13 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             }
         }
 
-        public void HandleContextCreated(CefV8Context context, bool isMain)
+        public void HandleContextCreated(CefBrowser browser, CefV8Context context, bool isMain)
         { 
             if (isMain)
             {
                 lock (_registrationSyncRoot)
                 {
-                    CreateNativeObjectsAndCompletePendingQueries(_registeredObjects.Values, context);
+                    CreateNativeObjectsAndCompletePendingQueries(_registeredObjects.Where(entry => entry.Key.BrowserIdentifier == browser.Identifier).Select(entry => entry.Value).ToArray(), context, browser.Identifier);
                 }
             }
         }
@@ -156,10 +177,43 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             ReleasePendingBoundPromises(promiseHolder => promiseHolder.Context.IsSame(context));
         }
 
+        public void HandleBrowserCreated(CefBrowser browser)
+        {
+            lock (_registrationSyncRoot)
+            {
+                _browserInstanceCounts.TryGetValue(browser.Identifier, out var count);
+                _browserInstanceCounts[browser.Identifier] = count + 1;
+            }
+        }
+
         public void HandleBrowserDestroyed(CefBrowser browser)
         {
             ReleasePendingCalls(promiseHolder => promiseHolder.Browser?.IsSame(browser) == true);
             ReleasePendingBoundPromises(promiseHolder => promiseHolder.Browser?.IsSame(browser) == true);
+
+            lock (_registrationSyncRoot)
+            {
+                var browserIdentifier = browser.Identifier;
+                var count = _browserInstanceCounts[browserIdentifier] - 1;
+                if (count > 0)
+                {
+                    _browserInstanceCounts[browserIdentifier] = count;
+                    return;
+                }
+
+                _browserInstanceCounts.Remove(browserIdentifier);
+                foreach (var key in _registeredObjects.Keys.Where(key => key.BrowserIdentifier == browserIdentifier).ToArray())
+                {
+                    _registeredObjects.Remove(key);
+                }
+                foreach (var entry in _pendingBoundQueryTasks.Where(entry => entry.Key.BrowserIdentifier == browserIdentifier).ToArray())
+                {
+                    if (_pendingBoundQueryTasks.TryRemove(entry.Key, out var taskSource))
+                    {
+                        taskSource.TrySetCanceled();
+                    }
+                }
+            }
         }
 
         private void ReleasePendingCalls(Func<PromiseHolder, bool> shallRelease)
@@ -279,7 +333,7 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             }
         }
 
-        private bool CreateNativeObjectsAndCompletePendingQueries(IEnumerable<ObjectRegistrationInfo> objectInfos, CefV8Context context)
+        private bool CreateNativeObjectsAndCompletePendingQueries(IEnumerable<ObjectRegistrationInfo> objectInfos, CefV8Context context, int browserIdentifier)
         {
             try
             {
@@ -288,14 +342,14 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
                     var exception = new Exception("Failed to create native object");
                     foreach (var objectInfo in objectInfos)
                     {
-                        CompletePendingBoundQueryWithException(objectInfo.Name, exception);
+                        CompletePendingBoundQueryWithException(browserIdentifier, objectInfo.Name, exception);
                     }
                     return false;
                 }
 
                 foreach (var objectInfo in objectInfos)
                 {
-                    if (_pendingBoundQueryTasks.TryGetValue(objectInfo.Name, out var taskSource))
+                    if (_pendingBoundQueryTasks.TryGetValue((browserIdentifier, objectInfo.Name), out var taskSource))
                     {
                         taskSource.TrySetResult(true);
                     }
@@ -306,15 +360,15 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             {
                 foreach (var objectInfo in objectInfos)
                 {
-                    CompletePendingBoundQueryWithException(objectInfo.Name, ex);
+                    CompletePendingBoundQueryWithException(browserIdentifier, objectInfo.Name, ex);
                 }
                 throw;
             }
         }
 
-        private void CompletePendingBoundQueryWithException(string objectName, Exception exception)
+        private void CompletePendingBoundQueryWithException(int browserIdentifier, string objectName, Exception exception)
         {
-            if (_pendingBoundQueryTasks.TryGetValue(objectName, out var taskSource))
+            if (_pendingBoundQueryTasks.TryGetValue((browserIdentifier, objectName), out var taskSource))
             {
                 taskSource.TrySetException(exception);
             }
@@ -358,12 +412,12 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
             }
         }
 
-        private bool RemoveNativeObjectRegistration(string objName)
+        private bool RemoveNativeObjectRegistration(int browserIdentifier, string objName)
         {
             lock (_registrationSyncRoot)
             {
-                var objectRemoved = _registeredObjects.Remove(objName);
-                if (_pendingBoundQueryTasks.TryRemove(objName, out var taskSource))
+                var objectRemoved = _registeredObjects.Remove((browserIdentifier, objName));
+                if (_pendingBoundQueryTasks.TryRemove((browserIdentifier, objName), out var taskSource))
                 {
                     taskSource.TrySetResult(false);
                 }
@@ -380,26 +434,32 @@ namespace Xilium.CefGlue.BrowserProcess.ObjectBinding
 
         PromiseHolder INativeObjectRegistry.Bind(string objName, CefV8Context context)
         {
+            int browserIdentifier;
+            using (var browser = context.GetBrowser())
+            {
+                browserIdentifier = browser.Identifier;
+            }
             var promiseHolder = context.CreatePromise();
             lock (_pendingBoundPromiseSyncRoot)
             {
                 _pendingBoundPromises.Add(promiseHolder, 0);
             }
 
-            var boundQueryTask = _pendingBoundQueryTasks.GetOrAdd(objName, _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            var boundQueryTask = _pendingBoundQueryTasks.GetOrAdd((browserIdentifier, objName), _ => new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
             _ = boundQueryTask.ContinueWith(task => SchedulePendingBoundPromiseCompletion(promiseHolder, task), TaskScheduler.Default);
             return promiseHolder;
         }
 
         void INativeObjectRegistry.Unbind(string objName)
         {
-            if (!RemoveNativeObjectRegistration(objName))
-            {
-                return;
-            }
-
             using (var context = CefV8Context.GetCurrentContext().EnterOrFail())
+            using (var browser = context.V8Context.GetBrowser())
             {
+                if (!RemoveNativeObjectRegistration(browser.Identifier, objName))
+                {
+                    return;
+                }
+
                 DeleteNativeObjectValue(objName, context.V8Context);
             }
         }

@@ -54,6 +54,8 @@ namespace Xilium.CefGlue.Avalonia.Platform
 
         public void Close()
         {
+            // CEF hides and reopens the same OSR popup menu host.
+            // Keep the window reusable here; Dispose closes it permanently.
             PostIfNotDisposed(() => _popup.Hide());
         }
 
@@ -69,7 +71,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
                 _disposed = true;
             }
 
-            Dispatcher.UIThread.Post(() => _popup.Hide());
+            Dispatcher.UIThread.Post(() => _popup.Close());
         }
 
         private void PostIfNotDisposed(Action action)

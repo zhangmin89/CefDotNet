@@ -9,18 +9,18 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 {
     public interface ILogInitializer
     {
-        Logger CreateLogger();
+        NLog.Logger CreateLogger();
     }
 
     public class NLogLogger : ILogger
     {
         private readonly object _syncObject = new object();
         private readonly ILogInitializer _logInitializer;
-        private volatile Logger _log = null;
+        private volatile NLog.Logger _log = null;
 
         private class CurrentLogInitilizer : ILogInitializer
         {
-            public Logger CreateLogger()
+            public NLog.Logger CreateLogger()
             {
                 return GetCurrentLogger();
             }
@@ -35,7 +35,7 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
                 _loggerName = loggerName;
             }
 
-            public Logger CreateLogger()
+            public NLog.Logger CreateLogger()
             {
                 return LogManager.GetLogger(_loggerName);
             }
@@ -50,13 +50,16 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
                 _type = type;
             }
 
-            public Logger CreateLogger()
+            public NLog.Logger CreateLogger()
             {
+                // Preserve legacy logger types, including non-public constructors and NLog's error policy.
+#pragma warning disable CS0618
                 return LogManager.GetCurrentClassLogger(_type);
+#pragma warning restore CS0618
             }
         }
 
-        private Logger Log
+        private NLog.Logger Log
         {
             get
             {
@@ -82,7 +85,7 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
         {
         }
 
-        public NLogLogger(Logger log)
+        public NLogLogger(NLog.Logger log)
         {
             _log = log;
             _logInitializer = null;
@@ -98,7 +101,7 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
         {
         }
 
-        private static Logger GetCurrentLogger()
+        private static NLog.Logger GetCurrentLogger()
         {
             string loggerName;
             Type declaringType;
@@ -128,7 +131,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void TraceException(string message, Exception exception)
         {
-            Log.TraceException(message, exception);
+            Log.Trace(exception, message);
+        }
+
+        public void Trace(string message)
+        {
+            Log.Trace(message);
         }
 
         public void Trace(string message, params object[] args)
@@ -138,7 +146,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void DebugException(string message, Exception exception)
         {
-            Log.DebugException(message, exception);
+            Log.Debug(exception, message);
+        }
+
+        public void Debug(string message)
+        {
+            Log.Debug(message);
         }
 
         public void Debug(string message, params object[] args)
@@ -148,7 +161,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void ErrorException(string message, Exception exception)
         {
-            Log.ErrorException(message, exception);
+            Log.Error(exception, message);
+        }
+
+        public void Error(string message)
+        {
+            Log.Error(message);
         }
 
         public void Error(string message, params object[] args)
@@ -158,7 +176,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void FatalException(string message, Exception exception)
         {
-            Log.FatalException(message, exception);
+            Log.Fatal(exception, message);
+        }
+
+        public void Fatal(string message)
+        {
+            Log.Fatal(message);
         }
 
         public void Fatal(string message, params object[] args)
@@ -168,7 +191,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void InfoException(string message, Exception exception)
         {
-            Log.InfoException(message, exception);
+            Log.Info(exception, message);
+        }
+
+        public void Info(string message)
+        {
+            Log.Info(message);
         }
 
         public void Info(string message, params object[] args)
@@ -178,7 +206,12 @@ namespace Xilium.CefGlue.Common.Helpers.Logger
 
         public void WarnException(string message, Exception exception)
         {
-            Log.WarnException(message, exception);
+            Log.Warn(exception, message);
+        }
+
+        public void Warn(string message)
+        {
+            Log.Warn(message);
         }
 
         public void Warn(string message, params object[] args)

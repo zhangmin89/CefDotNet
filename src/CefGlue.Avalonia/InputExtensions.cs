@@ -65,7 +65,7 @@ namespace Xilium.CefGlue.Avalonia
         /// <returns></returns>
         public static CefEventFlags AsCefEventFlags(this PointerEventArgs eventArgs)
         {
-            var flags = CefEventFlags.None;
+            var flags = eventArgs.KeyModifiers.AsCefKeyboardModifiers();
             var properties = eventArgs.GetCurrentPoint(null).Properties;
 
             if (properties.IsLeftButtonPressed)
@@ -108,6 +108,11 @@ namespace Xilium.CefGlue.Avalonia
             if (keyboardModifiers.HasFlag(KeyModifiers.Shift))
             {
                 modifiers |= CefEventFlags.ShiftDown;
+            }
+
+            if (keyboardModifiers.HasFlag(KeyModifiers.Meta))
+            {
+                modifiers |= CefEventFlags.CommandDown;
             }
 
             return modifiers;

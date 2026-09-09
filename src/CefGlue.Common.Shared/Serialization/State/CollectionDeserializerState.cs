@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Dynamic;
+using System.Collections.Generic;
 
 namespace Xilium.CefGlue.Common.Shared.Serialization.State
 {
@@ -17,7 +18,12 @@ namespace Xilium.CefGlue.Common.Shared.Serialization.State
                 throw new ArgumentException("Argument must contain an Add method.", nameof(collectionTypeInfo));
             }
 
-            Value = Activator.CreateInstance(collectionTypeInfo.ObjectType, nonPublic: true);
+            var collectionType = collectionTypeInfo.ObjectType;
+            if (collectionType.IsGenericType && collectionType.GetGenericTypeDefinition() == typeof(ISet<>))
+            {
+                collectionType = typeof(HashSet<>).MakeGenericType(collectionType.GetGenericArguments());
+            }
+            Value = Activator.CreateInstance(collectionType, nonPublic: true);
             _collectionTypeInfo = collectionTypeInfo;
             _collectionElementTypeInfo = collectionTypeInfo.EnumerableElementTypeInfo;
         }

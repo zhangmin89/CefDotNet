@@ -31,6 +31,10 @@ namespace Xilium.CefGlue.Common.ObjectBinding
             _parameterTypes = parameterTypes.ToArray();
         }
         
+        public int RequiredParameterCount => _mandatoryParametersCount;
+
+        public bool HasParamArray => _hasOptionalParameters;
+
         public Func<object> MakeDelegate<T>(object targetObj, T args)
         {
             var convertedArgs = ConvertArguments(args);
@@ -39,7 +43,17 @@ namespace Xilium.CefGlue.Common.ObjectBinding
 
         public void Execute<T>(object targetObj, T args, Action<object, Exception> handleResult)
         {
-            Execute(targetObj, ConvertArguments(args), handleResult);
+            object[] convertedArgs;
+            try
+            {
+                convertedArgs = ConvertArguments(args);
+            }
+            catch (Exception exception)
+            {
+                handleResult(default, exception);
+                return;
+            }
+            Execute(targetObj, convertedArgs, handleResult);
         }
 
         public void Execute(object targetObj, Func<object> innerMethod, Action<object, Exception> handleResult)
@@ -103,13 +117,10 @@ namespace Xilium.CefGlue.Common.ObjectBinding
         {
             if (string.IsNullOrEmpty(args))
             {
-                var convertedArguments = Array.Empty<object>();
-
-                ValidateMandatoryArguments(convertedArguments);
-                return convertedArguments;
+                return ConvertArgumentsWithOptionals(Array.Empty<object>());
             }
 
-            var originalArguments = Deserializer.Deserialize(args, _parameterTypes);
+            var originalArguments = _parameterTypes.Length == 0 ? Deserializer.Deserialize<object[]>(args) : Deserializer.Deserialize(args, _parameterTypes);
 
             return ConvertArgumentsWithOptionals(originalArguments);
         }

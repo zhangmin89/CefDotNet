@@ -61,9 +61,14 @@ namespace Xilium.CefGlue.Common.InternalHandlers
             _owner.DisplayHandler?.HandleLoadingProgressChange(browser, progress);
         }
 
+        protected override void OnMediaAccessChange(CefBrowser browser, bool hasVideoAccess, bool hasAudioAccess)
+        {
+            _owner.DisplayHandler?.HandleMediaAccessChange(browser, hasVideoAccess, hasAudioAccess);
+        }
+
         protected override bool OnCursorChange(CefBrowser browser, IntPtr cursorHandle, CefCursorType type, CefCursorInfo customCursorInfo)
         {
-            return _owner.HandleCursorChange(cursorHandle, type);
+            return (_owner.DisplayHandler?.HandleCursorChange(browser, cursorHandle, type, customCursorInfo) ?? false) || _owner.HandleCursorChange(cursorHandle, type);
         }
     }
 }

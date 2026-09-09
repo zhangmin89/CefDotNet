@@ -13,6 +13,7 @@ namespace Xilium.CefGlue.Common
         private readonly CefRenderHandler _renderHandler;
         private readonly CefLoadHandler _loadHandler;
         private readonly CefFrameHandler _frameHandler;
+        private readonly CefRequestHandler _requestHandler;
         private readonly CefContextMenuHandler _contextMenuHandler;
         private readonly ICefBrowserHost _owner;
 
@@ -31,6 +32,7 @@ namespace Xilium.CefGlue.Common
             _displayHandler = new CommonCefDisplayHandler(owner);
             _loadHandler = new CommonCefLoadHandler(owner);
             _frameHandler = new CommonCefFrameHandler(owner);
+            _requestHandler = new CommonCefRequestHandler(owner);
 
             _contextMenuHandler = new CommonCefContextMenuHandler(owner);
         }
@@ -72,7 +74,7 @@ namespace Xilium.CefGlue.Common
 
         protected override CefRequestHandler GetRequestHandler()
         {
-            return _owner.RequestHandler;
+            return _requestHandler;
         }
 
         protected override CefJSDialogHandler GetJSDialogHandler()

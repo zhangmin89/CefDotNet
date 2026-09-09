@@ -129,6 +129,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
         private void OnDragLeave(object sender, RoutedEventArgs e)
         {
             DragLeave?.Invoke();
+            _control.Cursor = _previousCursor;
         }
 
         private void OnDragEnter(object sender, DragEventArgs e)
@@ -139,7 +140,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
 
         private void OnPointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
-            MouseWheelChanged?.Invoke(e.AsCefMouseEvent(MousePositionReferential), (int)e.Delta.X * MouseWheelDelta, (int)e.Delta.Y * MouseWheelDelta);
+            MouseWheelChanged?.Invoke(e.AsCefMouseEvent(MousePositionReferential), (int)(e.Delta.X * MouseWheelDelta), (int)(e.Delta.Y * MouseWheelDelta));
         }
 
         private void OnPointerReleased(object sender, PointerReleasedEventArgs e)
@@ -194,7 +195,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
             {
                 _windowStateChangedObservable = newWindow.GetPropertyChangedObservable(Window.WindowStateProperty).Subscribe(OnHostWindowStateChanged);
             }
-            if (e.Root.RenderScaling != RenderSurface.DeviceScaleFactor)
+            if ((float)e.Root.RenderScaling != RenderSurface.DeviceScaleFactor)
             {
                 RenderSurface.DeviceScaleFactor = (float)e.Root.RenderScaling;
                 ScreenInfoChanged?.Invoke(RenderSurface.DeviceScaleFactor);

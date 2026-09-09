@@ -37,7 +37,7 @@ namespace Xilium.CefGlue.Common.InternalHandlers
         protected override bool GetScreenPoint(CefBrowser browser, int viewX, int viewY, ref int screenX, ref int screenY)
         {
             _owner.GetScreenPoint(viewX, viewY, ref screenX, ref screenY);
-            return true;
+            return false;
         }
 
         protected override bool GetScreenInfo(CefBrowser browser, CefScreenInfo screenInfo)
@@ -48,12 +48,18 @@ namespace Xilium.CefGlue.Common.InternalHandlers
 
         protected override void OnPopupShow(CefBrowser browser, bool show)
         {
-            _owner.HandlePopupShow(show);
+            if (!browser.IsPopup)
+            {
+                _owner.HandlePopupShow(show);
+            }
         }
 
         protected override void OnPopupSize(CefBrowser browser, CefRectangle rect)
         {
-            _owner.HandlePopupSizeChange(rect);
+            if (!browser.IsPopup)
+            {
+                _owner.HandlePopupSizeChange(rect);
+            }
         }
 
         protected override void OnAcceleratedPaint(CefBrowser browser, CefPaintElementType type, CefRectangle[] dirtyRects, IntPtr sharedHandle)
@@ -62,6 +68,10 @@ namespace Xilium.CefGlue.Common.InternalHandlers
 
         protected override void OnPaint(CefBrowser browser, CefPaintElementType type, CefRectangle[] dirtyRects, IntPtr buffer, int width, int height)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
             if (_logger.IsDebugEnabled)
             {
                 _logger.Debug($"Type: {type} Buffer: {buffer.ToInt64()} Width: {width} Height: {height}");

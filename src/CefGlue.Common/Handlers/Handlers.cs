@@ -90,6 +90,16 @@
         {
             OnLoadingProgressChange(browser, progress);
         }
+
+        internal bool HandleCursorChange(CefBrowser browser, System.IntPtr cursorHandle, CefCursorType type, CefCursorInfo customCursorInfo)
+        {
+            return OnCursorChange(browser, cursorHandle, type, customCursorInfo);
+        }
+
+        internal void HandleMediaAccessChange(CefBrowser browser, bool hasVideoAccess, bool hasAudioAccess)
+        {
+            OnMediaAccessChange(browser, hasVideoAccess, hasAudioAccess);
+        }
     }
 
     public class DownloadHandler : CefDownloadHandler { }
@@ -148,6 +158,51 @@
 
     public class RequestHandler : CefRequestHandler
     {
+        internal bool HandleBeforeBrowse(CefBrowser browser, CefFrame frame, CefRequest request, bool userGesture, bool isRedirect)
+        {
+            return OnBeforeBrowse(browser, frame, request, userGesture, isRedirect);
+        }
+
+        internal bool HandleOpenUrlFromTab(CefBrowser browser, CefFrame frame, string targetUrl, CefWindowOpenDisposition targetDisposition, bool userGesture)
+        {
+            return OnOpenUrlFromTab(browser, frame, targetUrl, targetDisposition, userGesture);
+        }
+
+        internal CefResourceRequestHandler HandleGetResourceRequestHandler(CefBrowser browser, CefFrame frame, CefRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
+        {
+            return GetResourceRequestHandler(browser, frame, request, isNavigation, isDownload, requestInitiator, ref disableDefaultHandling);
+        }
+
+        internal bool HandleGetAuthCredentials(CefBrowser browser, string originUrl, bool isProxy, string host, int port, string realm, string scheme, CefAuthCallback callback)
+        {
+            return GetAuthCredentials(browser, originUrl, isProxy, host, port, realm, scheme, callback);
+        }
+
+        internal bool HandleCertificateError(CefBrowser browser, CefErrorCode certError, string requestUrl, CefSslInfo sslInfo, CefCallback callback)
+        {
+            return OnCertificateError(browser, certError, requestUrl, sslInfo, callback);
+        }
+
+        internal bool HandleSelectClientCertificate(CefBrowser browser, bool isProxy, string host, int port, CefX509Certificate[] certificates, CefSelectClientCertificateCallback callback)
+        {
+            return OnSelectClientCertificate(browser, isProxy, host, port, certificates, callback);
+        }
+
+        internal void HandleRenderViewReady(CefBrowser browser)
+        {
+            OnRenderViewReady(browser);
+        }
+
+        internal void HandleRenderProcessTerminated(CefBrowser browser, CefTerminationStatus status)
+        {
+            OnRenderProcessTerminated(browser, status);
+        }
+
+        internal void HandleDocumentAvailableInMainFrame(CefBrowser browser)
+        {
+            OnDocumentAvailableInMainFrame(browser);
+        }
+
         protected override CefResourceRequestHandler GetResourceRequestHandler(CefBrowser browser, CefFrame frame, CefRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
         {
             return null;

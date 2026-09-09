@@ -33,7 +33,7 @@ namespace Xilium.CefGlue.Common
             }
 
 #if HAS_NLOG
-            _logger = new Logger(nameof(BaseCefBrowser));
+            _logger = new NLogLogger(nameof(BaseCefBrowser));
 #else
             _logger = new NullLogger(nameof(BaseCefBrowser));
 #endif

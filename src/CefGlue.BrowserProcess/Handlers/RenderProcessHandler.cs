@@ -50,7 +50,7 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
                 using (CefObjectTracker.StartTracking())
                 {
                     base.OnContextCreated(browser, frame, context);
-                    _javascriptToNativeDispatcher.HandleContextCreated(context, frame.IsMain);
+                    _javascriptToNativeDispatcher.HandleContextCreated(browser, context, frame.IsMain);
 
                     var message = new Messages.JsContextCreated();
                     var cefMessage = message.ToCefProcessMessage();
@@ -111,18 +111,27 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
 
         protected override void OnBrowserCreated(CefBrowser browser, CefDictionaryValue? extraInfo)
         {
-            _crashPipeName = extraInfo?.GetString(Constants.CrashPipeNameKey);
+            var crashPipeName = extraInfo?.GetString(Constants.CrashPipeNameKey);
             var previousBrowser = _browser;
-            _browser = browser;
+            if (!string.IsNullOrEmpty(crashPipeName))
+            {
+                _crashPipeName = crashPipeName;
+                _browser = browser;
+            }
             try
             {
+                _javascriptToNativeDispatcher.HandleBrowserCreated(browser);
                 base.OnBrowserCreated(browser, extraInfo);
             }
             finally
             {
-                if (!ReferenceEquals(previousBrowser, browser))
+                if (!ReferenceEquals(previousBrowser, _browser))
                 {
                     previousBrowser?.Dispose();
+                }
+                if (!ReferenceEquals(browser, _browser))
+                {
+                    browser.Dispose();
                 }
             }
         }
@@ -136,6 +145,7 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
                 {
                     _browser.Dispose();
                     _browser = null;
+                    _crashPipeName = null;
                 }
                 base.OnBrowserDestroyed(browser);
             }, null);

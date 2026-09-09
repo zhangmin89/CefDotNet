@@ -181,6 +181,7 @@
             <_CefGlueBrowserProcessExecutableName Condition="'$(_CefGlueBrowserProcessExecutableName)' == ''">Xilium.CefGlue.BrowserProcess</_CefGlueBrowserProcessExecutableName>
             <_CefGlueBrowserProcessIntermediateDirectory>$(IntermediateOutputPath)cefglue-browser-process\$(CefGlueTargetRuntimeIdentifier)\</_CefGlueBrowserProcessIntermediateDirectory>
             <_CefGlueBrowserProcessAppHost>$(_CefGlueBrowserProcessIntermediateDirectory)$(_CefGlueBrowserProcessExecutableName)</_CefGlueBrowserProcessAppHost>
+            <_CefGlueBrowserProcessStagingAppHost>$(_CefGlueBrowserProcessIntermediateDirectory)staging\$(_CefGlueBrowserProcessExecutableName)</_CefGlueBrowserProcessStagingAppHost>
             <_CefGlueBrowserProcessAssembly>$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.dll</_CefGlueBrowserProcessAssembly>
             <_CefGlueBrowserProcessWindowsGui>false</_CefGlueBrowserProcessWindowsGui>
             <_CefGlueBrowserProcessWindowsGui Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))">true</_CefGlueBrowserProcessWindowsGui>
@@ -192,8 +193,9 @@
     </Target>
 
     <Target Name="CreateCefGlueBrowserProcessAppHost" DependsOnTargets="PrepareCefGlueBrowserProcessAppHost" Inputs="$(_CefGlueBrowserProcessAssembly);$(AppHostSourcePath);$(MSBuildAllProjects)" Outputs="$(_CefGlueBrowserProcessAppHost)" Condition="('$(OutputType)' == 'Exe' or '$(OutputType)' == 'WinExe' or '$(IsTestProject)' == 'true') and '$(DesignTimeBuild)' != 'true'">
-        <MakeDir Directories="$(_CefGlueBrowserProcessIntermediateDirectory)" />
-        <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(_CefGlueBrowserProcessAppHost)" AppBinaryName="Xilium.CefGlue.BrowserProcess.dll" IntermediateAssembly="$(_CefGlueBrowserProcessAssembly)" WindowsGraphicalUserInterface="$(_CefGlueBrowserProcessWindowsGui)" EnableMacOSCodeSign="$(_CefGlueBrowserProcessMacOSCodeSign)" Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
-        <PatchPeStackReserve Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))" FilePath="$(_CefGlueBrowserProcessAppHost)" StackReserveBytes="8388608" />
+        <MakeDir Directories="$(_CefGlueBrowserProcessIntermediateDirectory)staging" />
+        <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)" AppHostDestinationPath="$(_CefGlueBrowserProcessStagingAppHost)" AppBinaryName="Xilium.CefGlue.BrowserProcess.dll" IntermediateAssembly="$(_CefGlueBrowserProcessAssembly)" WindowsGraphicalUserInterface="$(_CefGlueBrowserProcessWindowsGui)" EnableMacOSCodeSign="$(_CefGlueBrowserProcessMacOSCodeSign)" Retries="$(CopyRetryCount)" RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
+        <PatchPeStackReserve Condition="$(CefGlueTargetRuntimeIdentifier.StartsWith('win-'))" FilePath="$(_CefGlueBrowserProcessStagingAppHost)" StackReserveBytes="8388608" />
+        <Move SourceFiles="$(_CefGlueBrowserProcessStagingAppHost)" DestinationFiles="$(_CefGlueBrowserProcessAppHost)" />
     </Target>
 </Project>

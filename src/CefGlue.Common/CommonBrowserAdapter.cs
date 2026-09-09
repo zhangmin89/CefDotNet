@@ -120,7 +120,7 @@ namespace Xilium.CefGlue.Common
 
         public CefRequestContext RequestContext { get; }
 
-        public string Address { get => _browser?.GetMainFrame().Url ?? _initialUrl; set => NavigateTo(value); }
+        public string Address { get => _browser?.GetMainFrame()?.Url ?? _initialUrl; set => NavigateTo(value); }
 
         #region Cef Handlers
 
@@ -577,6 +577,10 @@ namespace Xilium.CefGlue.Common
         {
             WithErrorHandling((nameof(ICefBrowserHost.HandleBrowserDestroyed)), () =>
             {
+                if (_browser != null)
+                {
+                    Cleanup(browser);
+                }
                 _objectMethodDispatcher = null;
             });
         }
@@ -631,11 +635,21 @@ namespace Xilium.CefGlue.Common
 
         void ICefBrowserHost.HandleStatusMessage(CefBrowser browser, string value)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
+
             StatusMessage?.Invoke(_eventsEmitter, value);
         }
 
         bool ICefBrowserHost.HandleConsoleMessage(CefBrowser browser, CefLogSeverity level, string message, string source, int line)
         {
+            if (browser.IsPopup)
+            {
+                return false;
+            }
+
             var handler = ConsoleMessage;
             if (handler != null)
             {
@@ -648,21 +662,41 @@ namespace Xilium.CefGlue.Common
 
         void ICefBrowserHost.HandleLoadStart(CefBrowser browser, CefFrame frame, CefTransitionType transitionType)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
+
             LoadStart?.Invoke(_eventsEmitter, new LoadStartEventArgs(frame));
         }
 
         void ICefBrowserHost.HandleLoadEnd(CefBrowser browser, CefFrame frame, int httpStatusCode)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
+
             LoadEnd?.Invoke(_eventsEmitter, new LoadEndEventArgs(frame, httpStatusCode));
         }
 
         void ICefBrowserHost.HandleLoadError(CefBrowser browser, CefFrame frame, CefErrorCode errorCode, string errorText, string failedUrl)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
+
             LoadError?.Invoke(_eventsEmitter, new LoadErrorEventArgs(frame, errorCode, errorText, failedUrl));
         }
 
         void ICefBrowserHost.HandleLoadingStateChange(CefBrowser browser, bool isLoading, bool canGoBack, bool canGoForward)
         {
+            if (browser.IsPopup)
+            {
+                return;
+            }
+
             LoadingStateChange?.Invoke(_eventsEmitter, new LoadingStateChangeEventArgs(isLoading, canGoBack, canGoForward));
         }
 
@@ -690,6 +724,15 @@ namespace Xilium.CefGlue.Common
             });
 
             return result;
+        }
+
+        void ICefBrowserHost.HandleRenderProcessTerminated(CefBrowser browser)
+        {
+            _javascriptExecutionEngine?.HandleRenderProcessTerminated(browser.Identifier);
+            if (_browser?.IsSame(browser) == true)
+            {
+                IsJavascriptEngineInitialized = false;
+            }
         }
 
         void ICefBrowserHost.HandleFrameDetached(CefBrowser browser, CefFrame frame)

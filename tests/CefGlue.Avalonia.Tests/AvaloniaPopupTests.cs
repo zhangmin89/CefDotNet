@@ -13,6 +13,8 @@ namespace CefGlue.Tests
         {
             ExtendedAvaloniaPopup popup = null;
             AvaloniaPopup host = null;
+            var opened = false;
+            var movedToQueuedPosition = false;
             await Run(() =>
             {
                 popup = new ExtendedAvaloniaPopup
@@ -22,6 +24,9 @@ namespace CefGlue.Tests
                     Height = 2,
                     Position = new PixelPoint(3, 4)
                 };
+                var queuedPosition = Browser.PointToScreen(new Point(10, 20));
+                popup.Opened += (_, _) => opened = true;
+                popup.PositionChanged += (_, args) => movedToQueuedPosition |= args.Point == queuedPosition;
                 host = new AvaloniaPopup(popup, popup.VisualChildren);
 
                 host.Open();
@@ -34,9 +39,10 @@ namespace CefGlue.Tests
             await Run(() =>
             {
                 Assert.IsFalse(popup.IsVisible);
+                Assert.IsFalse(opened, "The queued Open must be skipped after Dispose.");
+                Assert.IsFalse(movedToQueuedPosition, "The queued position change must be skipped after Dispose.");
                 Assert.AreEqual(1, popup.Width);
                 Assert.AreEqual(2, popup.Height);
-                Assert.AreEqual(new PixelPoint(3, 4), popup.Position);
                 host.RenderSurface.Dispose();
                 popup.Close();
             });

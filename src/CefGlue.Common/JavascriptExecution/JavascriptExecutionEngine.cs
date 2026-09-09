@@ -16,13 +16,16 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
     {
         private sealed class PendingEvaluation
         {
-            public PendingEvaluation(long frameIdentifier)
+            public PendingEvaluation(long frameIdentifier, int browserIdentifier)
             {
                 FrameIdentifier = frameIdentifier;
+                BrowserIdentifier = browserIdentifier;
                 CompletionSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             }
 
             public long FrameIdentifier { get; }
+
+            public int BrowserIdentifier { get; }
 
             public TaskCompletionSource<string> CompletionSource { get; }
 
@@ -114,7 +117,11 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                 Line = line
             };
 
-            var pendingEvaluation = new PendingEvaluation(frame.Identifier);
+            PendingEvaluation pendingEvaluation;
+            using (var browser = frame.Browser)
+            {
+                pendingEvaluation = new PendingEvaluation(frame.Identifier, browser.Identifier);
+            }
 
             _pendingTasks.TryAdd(taskId, pendingEvaluation);
 
@@ -141,6 +148,17 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
                     JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-failed", "");
                 }
                 throw;
+            }
+        }
+
+        public void HandleRenderProcessTerminated(int browserIdentifier)
+        {
+            foreach (var pendingTaskEntry in _pendingTasks.ToArray())
+            {
+                if (pendingTaskEntry.Value.BrowserIdentifier == browserIdentifier && _pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
+                {
+                    pendingTask.CompletionSource.TrySetCanceled();
+                }
             }
         }
 

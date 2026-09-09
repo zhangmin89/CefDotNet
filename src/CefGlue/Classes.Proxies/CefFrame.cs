@@ -241,7 +241,7 @@
         {
             get
             {
-                return CefV8Context.FromNative(
+                return CefV8Context.FromNativeOrNull(
                     cef_frame_t.get_v8context(_self)
                     );
             }

@@ -72,10 +72,10 @@ namespace Xilium.CefGlue.Common.Shared.Serialization.State
             if (!objectType.IsArray)
             {
                 collectionAddMethod =
-                    GetMethodFromType(typeof(ICollection<>), objectType, nameof(ICollection<object>.Add)) ??
-                    GetMethodFromType(typeof(IList), objectType, nameof(IList.Add)) ??
                     GetMethodFromType(typeof(IDictionary), objectType, nameof(IDictionary.Add)) ??
-                    GetMethodFromType(typeof(IDictionary<string, object>), objectType, nameof(IDictionary<string, object>.Add));
+                    GetMethodFromType(typeof(IDictionary<,>), objectType, nameof(IDictionary<string, object>.Add)) ??
+                    GetMethodFromType(typeof(ICollection<>), objectType, nameof(ICollection<object>.Add)) ??
+                    GetMethodFromType(typeof(IList), objectType, nameof(IList.Add));
             }
 
             var (objectKind, enumerableElementTypeInfo) = objectType switch
@@ -91,21 +91,24 @@ namespace Xilium.CefGlue.Common.Shared.Serialization.State
                 typeMembers = new();
 
                 var properties = objectType
-                .GetProperties(EligibleMembers)
-                .Where(p => p.CanWrite && !p.GetIndexParameters().Any());
+                    .GetProperties(EligibleMembers)
+                    .Where(p => p.CanWrite && !p.GetIndexParameters().Any());
 
                 var fields = objectType
                     .GetFields(EligibleMembers)
                     .Where(f => !f.IsInitOnly);
 
-                foreach (var prop in properties)
+                for (var type = objectType; type != null; type = type.BaseType)
                 {
-                    typeMembers.Add(prop.Name, new TypeMemberInfo(prop.PropertyType, (obj, value) => prop.SetValue(obj, value)));
-                }
+                    foreach (var prop in properties.Where(p => p.DeclaringType == type))
+                    {
+                        typeMembers.TryAdd(prop.Name, new TypeMemberInfo(prop.PropertyType, (obj, value) => prop.SetValue(obj, value)));
+                    }
 
-                foreach (var field in fields)
-                {
-                    typeMembers.Add(field.Name, new TypeMemberInfo(field.FieldType, (obj, value) => field.SetValue(obj, value)));
+                    foreach (var field in fields.Where(f => f.DeclaringType == type))
+                    {
+                        typeMembers.TryAdd(field.Name, new TypeMemberInfo(field.FieldType, (obj, value) => field.SetValue(obj, value)));
+                    }
                 }
             }
             
@@ -114,7 +117,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization.State
 
         private static JsonTypeInfo GetCollectionElementTypeInfo(Type collectionType)
         {
-            var interfaces = collectionType.GetInterfaces();
+            var interfaces = collectionType.GetInterfaces().Prepend(collectionType);
             var collectionGenericInterface = interfaces.FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ICollection<>));
             if (collectionGenericInterface != null)
             {
@@ -138,9 +141,12 @@ namespace Xilium.CefGlue.Common.Shared.Serialization.State
 
         private static TypeMethodInfo GetMethodFromType(Type baseType, Type targetType, string methodName)
         {
-            if (baseType.IsAssignableFrom(targetType))
+            var interfaceType = baseType.IsGenericTypeDefinition ?
+                targetType.GetInterfaces().Prepend(targetType).FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == baseType) :
+                baseType;
+            if (interfaceType?.IsAssignableFrom(targetType) == true)
             {
-                var method = baseType.GetMethod(methodName);
+                var method = interfaceType.GetMethod(methodName);
                 if (method != null)
                 {
                     return new TypeMethodInfo((obj, value) => method.Invoke(obj, value));

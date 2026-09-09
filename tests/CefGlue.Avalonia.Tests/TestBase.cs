@@ -28,6 +28,8 @@ namespace CefGlue.Tests
 
         protected AvaloniaCefBrowser Browser => browser;
 
+        protected virtual bool WindowlessRenderingEnabled => false;
+
         [OneTimeSetUp]
         protected async Task SetUp()
         {
@@ -47,7 +49,7 @@ namespace CefGlue.Tests
 
                 var uiThread = new Thread(() =>
                 {
-                    InitializeApplication();
+                    InitializeApplication(WindowlessRenderingEnabled);
 
                     Dispatcher.UIThread.Post(() =>
                     {
@@ -63,9 +65,9 @@ namespace CefGlue.Tests
             await initializationTaskCompletionSource.Task;
         }
 
-        internal static void InitializeApplication()
+        internal static void InitializeApplication(bool windowlessRenderingEnabled = false)
         {
-            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { RootCachePath = CacheRoot, LogFile = Path.Combine(AppContext.BaseDirectory, "cef-tests.log") }, customSchemes: new[] {
+            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { WindowlessRenderingEnabled = windowlessRenderingEnabled, RootCachePath = CacheRoot, LogFile = Path.Combine(AppContext.BaseDirectory, "cef-tests.log") }, customSchemes: new[] {
                 new CustomScheme()
                 {
                     SchemeName = CustomSchemeHandlerFactory.SchemeName,

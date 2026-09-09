@@ -11,7 +11,8 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
         {
             reader.AssertToken(JsonTokenType.Number);
 
-            switch (targetTypeInfo.TypeCode)
+            var targetType = Nullable.GetUnderlyingType(targetTypeInfo.ObjectType) ?? targetTypeInfo.ObjectType;
+            switch (Type.GetTypeCode(targetType))
             {
                 case TypeCode.Byte:
                     return reader.GetByte();
@@ -37,7 +38,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
                     return reader.GetDecimal();
                 default:
                     // e.g. convert to the object type used in ExpandoObjects
-                    return Convert.ChangeType(reader.GetDouble(), targetTypeInfo.ObjectType);
+                    return Convert.ChangeType(reader.GetDouble(), targetType);
             }
         }
 
@@ -73,7 +74,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
             return
                 targetTypeInfo.TypeCode == TypeCode.String ?
                 stringValue :
-                Convert.ChangeType(stringValue, targetTypeInfo.ObjectType);
+                Convert.ChangeType(stringValue, Nullable.GetUnderlyingType(targetTypeInfo.ObjectType) ?? targetTypeInfo.ObjectType);
         }
 
         public static void AssertToken(this Utf8JsonReader reader, JsonTokenType token)

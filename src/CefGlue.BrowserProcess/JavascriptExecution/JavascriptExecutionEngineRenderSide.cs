@@ -23,38 +23,51 @@ namespace Xilium.CefGlue.BrowserProcess.JavascriptExecution
                 JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-received", "");
             }
 
-            using (var context = frame.V8Context.EnterOrFail())
+            Messages.JsEvaluationResult response;
+            try
             {
-                // send script to browser
-                if (JavascriptExecutionTrace.IsEnabled)
+                using (var context = frame.V8Context.EnterOrFail())
                 {
-                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-start", "");
-                }
-                var evaluationStarted = JavascriptExecutionTrace.IsEnabled ? Stopwatch.GetTimestamp() : 0;
-                var success = context.V8Context.TryEval(JavascriptHelper.WrapScriptForEvaluation(message.Script), message.Url, message.Line, out var value, out var exception);
-                if (JavascriptExecutionTrace.IsEnabled)
-                {
-                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-complete", FormattableString.Invariant($"success={success} executionElapsedMs={Stopwatch.GetElapsedTime(evaluationStarted).TotalMilliseconds:F3}"));
-                }
+                    // send script to browser
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-start", "");
+                    }
+                    var evaluationStarted = JavascriptExecutionTrace.IsEnabled ? Stopwatch.GetTimestamp() : 0;
+                    var success = context.V8Context.TryEval(JavascriptHelper.WrapScriptForEvaluation(message.Script), message.Url, message.Line, out var value, out var exception);
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-evaluate-complete", FormattableString.Invariant($"success={success} executionElapsedMs={Stopwatch.GetElapsedTime(evaluationStarted).TotalMilliseconds:F3}"));
+                    }
 
-                var response = new Messages.JsEvaluationResult()
+                    response = new Messages.JsEvaluationResult()
+                    {
+                        TaskId = message.TaskId,
+                        Success = success,
+                        Exception = success ? null : exception.Message,
+                        ResultAsJson = value?.GetStringValue()
+                    };
+                }
+            }
+            catch (Exception exception)
+            {
+                response = new Messages.JsEvaluationResult()
                 {
                     TaskId = message.TaskId,
-                    Success = success,
-                    Exception = success ? null : exception.Message,
-                    ResultAsJson = value?.GetStringValue()
+                    Success = false,
+                    Exception = exception.Message
                 };
+            }
 
-                var cefResponseMessage = response.ToCefProcessMessage();
-                if (JavascriptExecutionTrace.IsEnabled)
-                {
-                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-start", "");
-                }
-                frame.SendProcessMessage(CefProcessId.Browser, cefResponseMessage);
-                if (JavascriptExecutionTrace.IsEnabled)
-                {
-                    JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-returned", "");
-                }
+            var cefResponseMessage = response.ToCefProcessMessage();
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-start", "");
+            }
+            frame.SendProcessMessage(CefProcessId.Browser, cefResponseMessage);
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(message.TaskId, frameIdentifier, "renderer-send-returned", "");
             }
         }
     }

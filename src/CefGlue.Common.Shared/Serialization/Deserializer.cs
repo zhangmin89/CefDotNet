@@ -70,6 +70,16 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
             return (object[])rootState.Value;
         }
 
+        public static int GetArrayLength(string jsonString)
+        {
+            if (string.IsNullOrEmpty(jsonString))
+            {
+                return 0;
+            }
+
+            return CreateJsonReader(jsonString).PeekAndCalculateArraySize();
+        }
+
         private static Utf8JsonReader CreateJsonReader(string jsonString)
         {
             var bytes = Encoding.UTF8.GetBytes(jsonString);
@@ -190,7 +200,7 @@ namespace Xilium.CefGlue.Common.Shared.Serialization
                         reader.ReadPropertyName(); // skip the $id
                         var id = tempReader.ReadString();
                         var currentState = state.Peek();
-                        if (tempReader.ReadPropertyName() == JsonAttributes.Values)
+                        if (tempReader.TokenType != JsonTokenType.EndObject && tempReader.ReadPropertyName() == JsonAttributes.Values)
                         {
                             // it's a list
                             reader.Read(); // skip the $id

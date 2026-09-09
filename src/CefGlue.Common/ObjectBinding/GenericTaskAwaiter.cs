@@ -8,6 +8,7 @@ namespace Xilium.CefGlue.Common.ObjectBinding
     {
         private static readonly ConcurrentDictionary<Type, Func<Task, object>> _taskResultMethods = new ConcurrentDictionary<Type, Func<Task, object>>();
         private static readonly Func<Task, object> _noop = t => null;
+        private static readonly Type _voidTaskResultType = Task.CompletedTask.GetType().GetProperty(nameof(Task<object>.Result))?.PropertyType;
 
         static GenericTaskAwaiter()
         {
@@ -49,6 +50,10 @@ namespace Xilium.CefGlue.Common.ObjectBinding
                 {
                     // generic Task<T>
                     var resultGetter = taskType.GetProperty(nameof(Task<object>.Result));
+                    if (resultGetter.PropertyType == _voidTaskResultType)
+                    {
+                        return _noop;
+                    }
                     return (task) => resultGetter.GetValue(task);
                 }
 
