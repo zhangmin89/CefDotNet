@@ -26,7 +26,7 @@ public class RendererBrowserStateReviewFixTests
         using var native = new NativeBrowsers();
         using var renderer = new RendererHandler();
         var main = native.Create(7);
-        var pipeName = "cef-review-route-" + Guid.NewGuid().ToString("N");
+        var pipeName = "cef-route-" + Guid.NewGuid().ToString("N");
         using var extra = CefDictionaryValue.Create();
         extra.SetString(Constants.CrashPipeNameKey, pipeName);
         renderer.Create(main, extra);
@@ -66,7 +66,7 @@ public class RendererBrowserStateReviewFixTests
         using var native = new NativeBrowsers();
         using var renderer = new RendererHandler();
         using var extra = CefDictionaryValue.Create();
-        extra.SetString(Constants.CrashPipeNameKey, "review-state-" + Guid.NewGuid().ToString("N"));
+        extra.SetString(Constants.CrashPipeNameKey, "cef-state-" + Guid.NewGuid().ToString("N"));
         var first = native.Create(17);
         renderer.Create(first, extra);
         Register(renderer.Dispatcher, first, "shared", "alpha");
@@ -91,7 +91,7 @@ public class RendererBrowserStateReviewFixTests
         using var native = new NativeBrowsers();
         using var renderer = new RendererHandler();
         using var extra = CefDictionaryValue.Create();
-        extra.SetString(Constants.CrashPipeNameKey, "review-state-" + Guid.NewGuid().ToString("N"));
+        extra.SetString(Constants.CrashPipeNameKey, "cef-state-" + Guid.NewGuid().ToString("N"));
         var first = native.Create(17);
         renderer.Create(first, extra);
         Register(renderer.Dispatcher, first, "shared", "alpha");

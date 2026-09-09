@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Input.Raw;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
+using CefGlue.Tests.Helpers;
 using NUnit.Framework;
 using Xilium.CefGlue;
 using Xilium.CefGlue.Avalonia;
@@ -71,6 +72,8 @@ public class BrowserReviewFixTests : TestBase
     [TearDown]
     public async Task CloseNativeBrowsers()
     {
+        var testName = TestContext.CurrentContext.Test.FullName;
+        TestDiagnostics.Write(testName, "browser-close-requested");
         lifecycle.TakeOverClose = false;
         lifecycle.IgnoreMainClose = false;
         if (lifecycle.Popup?.IsValid == true)
@@ -84,6 +87,7 @@ public class BrowserReviewFixTests : TestBase
             await lifecycle.MainClosed.Task.WaitAsync(Deadline);
         }
         await CefUi(() => { });
+        TestDiagnostics.Write(testName, "browser-close-complete");
     }
 
     protected async Task<CefBrowser> OpenPopup(bool windowless)
@@ -108,6 +112,21 @@ public class BrowserReviewFixTests : TestBase
         var expected = await EvaluateJavascript<string>("return window.location.href;", Deadline);
         Assert.IsTrue(expected.StartsWith("data:", StringComparison.Ordinal));
         Assert.AreEqual(expected, Browser.Address);
+    }
+
+    [Test]
+    public async Task ClosingBrowserCompletesWithoutClosingItsAvaloniaWindow()
+    {
+        Window window = null!;
+        await Run(() => window = (Window)TopLevel.GetTopLevel(Browser)!);
+        nativeHost.CloseBrowser(true);
+        await lifecycle.MainClosed.Task.WaitAsync(Deadline);
+        await CefUi(() => { });
+        await Run(() =>
+        {
+            Assert.IsTrue(window.IsVisible, "Closing the embedded browser must preserve its Avalonia window.");
+            Assert.AreSame(Browser, window.Content);
+        });
     }
 
     [Test]
@@ -474,6 +493,7 @@ public class BrowserReviewFixTests : TestBase
 
     private sealed class Lifecycle : LifeSpanHandler
     {
+        private readonly string testName = TestContext.CurrentContext.Test.FullName;
         public readonly TaskCompletionSource<CefBrowser> PopupCreated = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource PopupClosed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly TaskCompletionSource MainClosed = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -489,9 +509,14 @@ public class BrowserReviewFixTests : TestBase
             if (WindowlessPopup) windowInfo.SetAsWindowless(IntPtr.Zero, false);
             return false;
         }
-        protected override bool DoClose(CefBrowser browser) => TakeOverClose;
+        protected override bool DoClose(CefBrowser browser)
+        {
+            TestDiagnostics.Write(testName, "browser-do-close", $"browser={browser.Identifier} popup={browser.IsPopup} takeOver={TakeOverClose}");
+            return TakeOverClose;
+        }
         protected override void OnBeforeClose(CefBrowser browser)
         {
+            TestDiagnostics.Write(testName, "browser-before-close", $"browser={browser.Identifier} popup={browser.IsPopup} ignored={IgnoreMainClose}");
             if (browser.IsPopup) PopupClosed.TrySetResult();
             else { BeforeMainClose?.Invoke(); if (!IgnoreMainClose) MainClosed.TrySetResult(); }
             if (DisposeCloseCallbackBrowser) browser.Dispose();

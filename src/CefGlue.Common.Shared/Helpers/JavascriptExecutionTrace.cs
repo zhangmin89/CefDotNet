@@ -6,7 +6,8 @@ namespace Xilium.CefGlue.Common.Shared.Helpers
 {
     internal static class JavascriptExecutionTrace
     {
-        public static bool IsEnabled { get; } = Environment.GetEnvironmentVariable("CEFGLUE_TRACE_JAVASCRIPT") == "1";
+        private static readonly string? setting = Environment.GetEnvironmentVariable("CEFGLUE_TRACE_JAVASCRIPT");
+        public static bool IsEnabled { get; } = setting == "1" || (setting != null && Path.IsPathFullyQualified(setting));
         private static readonly TextWriter output = CreateOutput();
 
         private static TextWriter CreateOutput()
@@ -18,7 +19,8 @@ namespace Xilium.CefGlue.Common.Shared.Helpers
 
             try
             {
-                return TextWriter.Synchronized(new StreamWriter(Path.Combine(AppContext.BaseDirectory, $"javascript-execution-{Environment.ProcessId}.log"), append: true) { AutoFlush = true });
+                var path = setting == "1" ? Path.Combine(AppContext.BaseDirectory, $"javascript-execution-{Environment.ProcessId}.log") : setting!;
+                return TextWriter.Synchronized(new StreamWriter(path, append: true) { AutoFlush = true });
             }
             catch (IOException)
             {

@@ -24,6 +24,7 @@ namespace Xilium.CefGlue.Avalonia.Platform
         private static IPlatformHandle _hostWindowPlatformHandle;
 
         private IHandleHolder _browserView;
+        private IntPtr _macBrowserView;
         private readonly IAvaloniaList<Visual> _controlVisualChildren;
 
         protected readonly Control _control;
@@ -168,6 +169,10 @@ namespace Xilium.CefGlue.Avalonia.Platform
         {
             switch (CefRuntime.Platform)
             {
+                case CefRuntimePlatform.MacOS:
+                    // Keep the CEF child view separately from the Avalonia host NSView.
+                    _macBrowserView = browserHandle;
+                    break;
                 case CefRuntimePlatform.Windows:
                     // store cef window handle, to dispose later
                     _browserView = new HostWindow(browserHandle);
@@ -205,7 +210,20 @@ namespace Xilium.CefGlue.Avalonia.Platform
                 {
                     if (_browserView != null)
                     {
-                        _browserView.Dispose();
+                        if (CefRuntime.Platform == CefRuntimePlatform.MacOS)
+                        {
+                            var cefView = _macBrowserView;
+                            // Defer native destruction until DoClose has returned, on the AppKit thread.
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                NSView.RemoveFromSuperview(cefView);
+                                browserView.Dispose();
+                            });
+                        }
+                        else
+                        {
+                            _browserView.Dispose();
+                        }
                         _browserView = null;
                     }
 

@@ -48,6 +48,7 @@ namespace Xilium.CefGlue.Avalonia.Platform.MacOS
         private static readonly IntPtr InitSelector = sel_registerName("init");
         private static readonly IntPtr AllocSelector = sel_registerName("alloc");
         private static readonly IntPtr SetFrameSelector = sel_registerName("setFrame:");
+        private static readonly IntPtr RemoveFromSuperviewSelector = sel_registerName("removeFromSuperview");
 
         public NSView()
         {
@@ -73,6 +74,11 @@ namespace Xilium.CefGlue.Avalonia.Platform.MacOS
         public void SetFrame(CGRect frame)
         {
             objc_msgSend(Handle, SetFrameSelector, frame);
+        }
+
+        public static void RemoveFromSuperview(IntPtr handle)
+        {
+            objc_msgSend(handle, RemoveFromSuperviewSelector);
         }
 
         public void Dispose()
