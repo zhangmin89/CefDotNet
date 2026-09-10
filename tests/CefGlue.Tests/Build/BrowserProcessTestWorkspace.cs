@@ -104,6 +104,11 @@ namespace CefGlue.Tests.Build
             return _commands.RunAsync("helper-startup", Path.Combine(directory, HostName), directory, [], startup: true);
         }
 
+        public Task<string> StartConsumerAsync(string directory)
+        {
+            return _commands.RunAsync("consumer-startup", Path.Combine(directory, "Consumer" + (OperatingSystem.IsWindows() ? ".exe" : "")), directory, [], startup: true);
+        }
+
         public string BuildOutput(string? rid = null) => Path.Combine(Work, "bin", "Consumer", rid == null ? "release" : "release_" + rid);
         public string AssetsFile => Path.Combine(Work, "obj", "Consumer", "project.assets.json");
 

@@ -31,6 +31,7 @@ namespace CefGlue.Tests.Build
             };
             foreach (var argument in arguments) { info.ArgumentList.Add(argument); }
             info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+            info.Environment["DOTNET_DISABLE_GUI_ERRORS"] = "1";
             TestContext.Progress.WriteLine($"COMMAND {fileName} {string.Join(' ', info.ArgumentList)}\nWORKING_DIRECTORY {workingDirectory}");
 
             await using var stdout = new FileStream(stdoutPath, FileMode.CreateNew, FileAccess.Write, FileShare.ReadWrite, 1, FileOptions.Asynchronous);

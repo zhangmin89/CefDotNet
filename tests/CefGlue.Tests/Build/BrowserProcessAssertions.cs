@@ -54,7 +54,7 @@ namespace CefGlue.Tests.Build
             }
         }
 
-        public static void ConsumerOutput(string directory, string rid, string? packagePath, bool singleFile = false)
+        public static void ConsumerOutput(string directory, string rid, string? packagePath, bool singleFile = false, bool selfContained = false)
         {
             foreach (var name in PayloadNames) { RequireFile(Path.Combine(directory, name)); }
             var expectedMachine = rid.EndsWith("arm64") ? Machine.Arm64 : Machine.Amd64;
@@ -69,7 +69,23 @@ namespace CefGlue.Tests.Build
                 var portableRequired = name == "Xilium.CefGlue.BrowserProcess" || !rid.StartsWith("win-");
                 Assert.IsTrue(IsAnyCpu(pe) || (!portableRequired && pe.PEHeaders.CoffHeader.Machine == expectedMachine), $"Managed dependency architecture mismatch: {path}; expected {rid}");
             }
-            using (var stream = File.OpenRead(Path.Combine(directory, "Xilium.CefGlue.BrowserProcess.runtimeconfig.json"))) { RuntimeIsFrameworkDependent(stream); }
+            using (var stream = File.OpenRead(Path.Combine(directory, "Xilium.CefGlue.BrowserProcess.runtimeconfig.json")))
+            {
+                if (selfContained)
+                {
+                    using var config = JsonDocument.Parse(stream);
+                    var options = config.RootElement.GetProperty("runtimeOptions");
+                    Assert.IsFalse(options.TryGetProperty("framework", out _));
+                    Assert.IsFalse(options.TryGetProperty("frameworks", out _));
+                    Assert.IsTrue(options.GetProperty("includedFrameworks").EnumerateArray().Any(framework => framework.GetProperty("name").GetString() == "Microsoft.NETCore.App"));
+                    RequireFile(Path.Combine(directory, "System.Private.CoreLib.dll"));
+                    RequireFile(Path.Combine(directory, rid.StartsWith("win-") ? "coreclr.dll" : rid.StartsWith("osx-") ? "libcoreclr.dylib" : "libcoreclr.so"));
+                    using var dependencies = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "Xilium.CefGlue.BrowserProcess.deps.json")));
+                    StringAssert.EndsWith("/" + rid, dependencies.RootElement.GetProperty("runtimeTarget").GetProperty("name").GetString());
+                    StringAssert.Contains("System.Private.CoreLib.dll", dependencies.RootElement.GetProperty("targets").GetRawText());
+                }
+                else { RuntimeIsFrameworkDependent(stream); }
+            }
 
             var hostPath = Path.Combine(directory, "Xilium.CefGlue.BrowserProcess" + (rid.StartsWith("win-") ? ".exe" : ""));
             RequireFile(hostPath);
@@ -114,6 +130,7 @@ namespace CefGlue.Tests.Build
                 using var package = ZipFile.OpenRead(packagePath);
                 foreach (var name in PayloadNames)
                 {
+                    if (selfContained && name.EndsWith(".json")) { continue; }
                     var prefix = name is "Xilium.CefGlue.Common.Shared.dll" or "Xilium.CefGlue.dll" ? "lib/net8.0/" : "tools/browser-process/";
                     using var stream = RequiredEntry(package, prefix + name).Open();
                     Assert.AreEqual(Hash(stream), HashFile(Path.Combine(directory, name)), $"Consumer payload differs from package: {name}");

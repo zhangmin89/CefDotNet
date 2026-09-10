@@ -60,6 +60,36 @@ namespace CefGlue.Tests.Build
             await workspace.StartHelperAsync(output);
         }
 
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        public async Task SelfContainedPublishStartsHelperWithAppLocalRuntime(bool sourceReference, bool singleFile)
+        {
+            var workspace = _suite.CreateCase(nameof(SelfContainedPublishStartsHelperWithAppLocalRuntime));
+            var project = workspace.CreateConsumer(sourceReference);
+            var output = Path.Combine(workspace.Root, "publish");
+            await workspace.DotnetAsync("publish-self-contained", "publish", project, "-r", workspace.NativeRid, "--self-contained", "true", $"-p:PublishSingleFile={singleFile}", "-o", output);
+            await workspace.StartHelperAsync(output);
+            ValidateOutput(workspace, output, workspace.NativeRid, sourceReference, singleFile, selfContained: true);
+            if (singleFile) { Assert.IsFalse(File.Exists(Path.Combine(output, "Consumer.dll")), "The main application was not bundled."); }
+            await workspace.StartConsumerAsync(output);
+        }
+
+        [Test]
+        public async Task SelfContainedSwitchRefreshesHelperInSamePublishDirectory()
+        {
+            var workspace = _suite.CreateCase(nameof(SelfContainedSwitchRefreshesHelperInSamePublishDirectory));
+            var project = workspace.CreateConsumer(sourceReference: false);
+            var output = Path.Combine(workspace.Root, "publish");
+            foreach (var selfContained in new[] { false, true, false, true })
+            {
+                await workspace.DotnetAsync("publish-" + selfContained, "publish", project, "-r", workspace.NativeRid, "--self-contained", selfContained.ToString().ToLowerInvariant(), "-o", output);
+                await workspace.StartHelperAsync(output);
+                ValidateOutput(workspace, output, workspace.NativeRid, selfContained: selfContained);
+                await workspace.StartConsumerAsync(output);
+            }
+        }
+
         [TestCase("unchanged")]
         [TestCase("missing-host")]
         [TestCase("changed-input")]
@@ -202,9 +232,9 @@ namespace CefGlue.Tests.Build
             StringAssert.Contains(mutation == "arm64-library" ? "Payload is not AnyCPU: lib/net8.0/Xilium.CefGlue.dll" : "Missing package payload: tools/browser-process/Xilium.CefGlue.BrowserProcess.deps.json", error!.Message);
         }
 
-        private static void ValidateOutput(BrowserProcessTestWorkspace workspace, string directory, string rid, bool sourceReference = false, bool singleFile = false)
+        private static void ValidateOutput(BrowserProcessTestWorkspace workspace, string directory, string rid, bool sourceReference = false, bool singleFile = false, bool selfContained = false)
         {
-            BrowserProcessAssertions.ConsumerOutput(directory, rid, sourceReference ? null : workspace.PackagePath, singleFile);
+            BrowserProcessAssertions.ConsumerOutput(directory, rid, sourceReference ? null : workspace.PackagePath, singleFile, selfContained);
             BrowserProcessAssertions.NativeResources(directory, rid, workspace.AssetsFile);
         }
     }

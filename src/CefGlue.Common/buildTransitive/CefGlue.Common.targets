@@ -15,7 +15,7 @@
         <Error Condition="'$(CefGlueTargetRuntimeIdentifier)' != 'win-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'win-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'linux-arm64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-x64' and '$(CefGlueTargetRuntimeIdentifier)' != 'osx-arm64'" Text="CefGlue supports win-x64, win-arm64, linux-x64, linux-arm64, osx-x64 and osx-arm64; resolved '$(CefGlueTargetRuntimeIdentifier)'. Set RuntimeIdentifier explicitly when cross-compiling." />
     </Target>
 
-    <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ValidateCefGlueRuntimeAssets;$(CefGluePrepareRuntimeAssetsTargets);CreateCefGlueBrowserProcessAppHost" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Target Name="CollectCefGlueRuntimeAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ValidateCefGlueRuntimeAssets;$(CefGluePrepareRuntimeAssetsTargets);CreateCefGlueBrowserProcessAppHost;PrepareCefGlueBrowserProcessRuntimeFiles" Condition="'$(DesignTimeBuild)' != 'true'">
         <!-- 切换架构时，新选中的资源和缓存 apphost 可能更旧；必须按当前来源复制。 -->
         <ItemGroup Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64' or '$(CefGlueTargetRuntimeIdentifier)' == 'osx-arm64'">
             <_CefGlueMacOSRuntimeAsset Include="@(CefRedistOSX64)" Condition="'$(CefGlueTargetRuntimeIdentifier)' == 'osx-x64'" />
@@ -44,6 +44,8 @@
         <ItemGroup>
             <!-- 共享 DLL 使用主程序已经解析的引用，避免同目录下重复复制和覆盖。 -->
             <_CefGlueBrowserProcessAsset Include="$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.*" />
+            <_CefGlueBrowserProcessAsset Remove="$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.runtimeconfig.json;$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.deps.json" Condition="'$(SelfContained)' == 'true'" />
+            <_CefGlueBrowserProcessAsset Include="@(_CefGlueBrowserProcessRuntimeFile)" />
             <_CefGlueBrowserProcessAsset Include="$(_CefGlueBrowserProcessAppHost)" Condition="'$(_CefGlueBrowserProcessAppHost)' != ''" />
             <None Include="@(_CefGlueBrowserProcessAsset)">
                 <Visible>false</Visible>
@@ -57,10 +59,80 @@
         </ItemGroup>
     </Target>
 
+    <!-- 自包含消费共享主程序的 runtime pack，但保留子进程自己的托管依赖。 -->
+    <Target Name="PrepareCefGlueBrowserProcessRuntimeFiles" DependsOnTargets="ResolveRuntimePackAssets" Condition="'$(SelfContained)' == 'true' and '$(DesignTimeBuild)' != 'true'">
+        <PropertyGroup>
+            <_CefGlueBrowserProcessRuntimeDirectory>$(IntermediateOutputPath)cefglue-browser-process\$(CefGlueTargetRuntimeIdentifier)\self-contained\</_CefGlueBrowserProcessRuntimeDirectory>
+        </PropertyGroup>
+        <ItemGroup>
+            <_CefGlueBrowserProcessRuntimePackAsset Include="@(RuntimePackAsset)" Condition="'%(RuntimePackAsset.NuGetPackageId)' == 'Microsoft.NETCore.App.Runtime.$(RuntimeIdentifier)' and ('%(RuntimePackAsset.AssetType)' == 'runtime' or '%(RuntimePackAsset.AssetType)' == 'native')" />
+            <_CefGlueBrowserProcessRuntimeFramework Include="@(RuntimeFramework)" Condition="'%(RuntimeFramework.Identity)' == 'Microsoft.NETCore.App'" />
+            <_CefGlueBrowserProcessRuntimeFile Include="$(_CefGlueBrowserProcessRuntimeDirectory)Xilium.CefGlue.BrowserProcess.runtimeconfig.json;$(_CefGlueBrowserProcessRuntimeDirectory)Xilium.CefGlue.BrowserProcess.deps.json" />
+        </ItemGroup>
+        <MakeDir Directories="$(_CefGlueBrowserProcessRuntimeDirectory)" />
+        <GenerateRuntimeConfigurationFiles AssetsFilePath="$(ProjectAssetsFile)" TargetFramework="$(TargetFramework)" TargetFrameworkMoniker="$(TargetFrameworkMoniker)" RuntimeConfigPath="$(_CefGlueBrowserProcessRuntimeDirectory)Xilium.CefGlue.BrowserProcess.runtimeconfig.json" RuntimeIdentifier="$(RuntimeIdentifier)" RuntimeFrameworks="@(_CefGlueBrowserProcessRuntimeFramework)" IsSelfContained="true" WriteIncludedFrameworks="true" />
+        <GenerateCefGlueBrowserProcessDeps SourcePath="$(CefGlueBrowserProcessAssetsPath)Xilium.CefGlue.BrowserProcess.deps.json" DestinationPath="$(_CefGlueBrowserProcessRuntimeDirectory)Xilium.CefGlue.BrowserProcess.deps.json" TargetFrameworkMoniker="$(TargetFrameworkMoniker)" RuntimeIdentifier="$(RuntimeIdentifier)" RuntimePackAssets="@(_CefGlueBrowserProcessRuntimePackAsset)" />
+        <ItemGroup>
+            <FileWrites Include="@(_CefGlueBrowserProcessRuntimeFile)" />
+        </ItemGroup>
+    </Target>
+
+    <UsingTask TaskName="GenerateCefGlueBrowserProcessDeps" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <SourcePath ParameterType="System.String" Required="true" />
+            <DestinationPath ParameterType="System.String" Required="true" />
+            <TargetFrameworkMoniker ParameterType="System.String" Required="true" />
+            <RuntimeIdentifier ParameterType="System.String" Required="true" />
+            <RuntimePackAssets ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+        </ParameterGroup>
+        <Task>
+            <!-- 内联任务使用 SDK 的 net472 编译引用，不向消费项目引入 JSON 依赖。 -->
+            <Reference Include="$(MSBuildSDKsPath)\Microsoft.NET.Sdk\tools\net472\Newtonsoft.Json.dll" />
+            <Using Namespace="System.IO" />
+            <Using Namespace="System.Linq" />
+            <Using Namespace="Newtonsoft.Json.Linq" />
+            <Code Type="Fragment" Language="cs"><![CDATA[
+            var document = JObject.Parse(File.ReadAllText(SourcePath));
+            var target = (JObject)document["targets"].First.First.DeepClone();
+            var targetName = TargetFrameworkMoniker + "/" + RuntimeIdentifier;
+            document["runtimeTarget"]["name"] = targetName;
+            document["targets"] = new JObject { [targetName] = target };
+            var helper = (JObject)target.Properties().Single(property => property.Name.StartsWith("Xilium.CefGlue.BrowserProcess/")).Value;
+            foreach (var pack in RuntimePackAssets.GroupBy(asset => asset.GetMetadata("NuGetPackageId")))
+            {
+                var version = pack.First().GetMetadata("NuGetPackageVersion");
+                var name = "runtimepack." + pack.Key;
+                var library = new JObject();
+                foreach (var group in pack.GroupBy(asset => asset.GetMetadata("AssetType")))
+                {
+                    var files = new JObject();
+                    foreach (var asset in group) { files[asset.GetMetadata("DestinationSubPath").Replace('\\', '/')] = new JObject(); }
+                    library[group.Key] = files;
+                }
+                target[name + "/" + version] = library;
+                document["libraries"][name + "/" + version] = new JObject { ["type"] = "runtimepack", ["serviceable"] = false, ["sha512"] = "" };
+                helper["dependencies"][name] = version;
+            }
+            File.WriteAllText(DestinationPath, document.ToString());
+            ]]></Code>
+        </Task>
+    </UsingTask>
+
     <!-- BrowserProcess 独立运行，主程序发布为单文件时也需要保留这两个共享 DLL。 -->
     <Target Name="KeepCefGlueBrowserProcessDependenciesExternal" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(PublishSingleFile)' == 'true'">
         <ItemGroup>
             <ResolvedFileToPublish Update="@(ResolvedFileToPublish)" Condition="'%(ResolvedFileToPublish.FileName)' == 'Xilium.CefGlue' or '%(ResolvedFileToPublish.FileName)' == 'Xilium.CefGlue.Common.Shared'">
+                <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+            </ResolvedFileToPublish>
+        </ItemGroup>
+    </Target>
+
+    <!-- 主程序按 SDK 规则打包运行时；打包后再为独立子进程保留外部副本。 -->
+    <Target Name="IncludeCefGlueBrowserProcessRuntimeAfterBundle" AfterTargets="ComputeFilesToPublish" Condition="'$(PublishSingleFile)' == 'true' and '$(SelfContained)' == 'true'">
+        <ItemGroup>
+            <ResolvedFileToPublish Include="@(_CefGlueBrowserProcessRuntimePackAsset)" Exclude="@(ResolvedFileToPublish)">
+                <RelativePath>%(_CefGlueBrowserProcessRuntimePackAsset.DestinationSubPath)</RelativePath>
+                <CopyToPublishDirectory>Always</CopyToPublishDirectory>
                 <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
             </ResolvedFileToPublish>
         </ItemGroup>
