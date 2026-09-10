@@ -86,8 +86,8 @@
             <RuntimePackAssets ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
         </ParameterGroup>
         <Task>
-            <!-- 内联任务使用 SDK 的 net472 编译引用，不向消费项目引入 JSON 依赖。 -->
-            <Reference Include="$(MSBuildSDKsPath)\Microsoft.NET.Sdk\tools\net472\Newtonsoft.Json.dll" />
+            <!-- 内联任务直接读取引用路径，使用跨平台分隔符；复用 SDK 的 net472 引用，不向消费项目引入 JSON 依赖。 -->
+            <Reference Include="$(MSBuildSDKsPath)/Microsoft.NET.Sdk/tools/net472/Newtonsoft.Json.dll" />
             <Using Namespace="System.IO" />
             <Using Namespace="System.Linq" />
             <Using Namespace="Newtonsoft.Json.Linq" />
