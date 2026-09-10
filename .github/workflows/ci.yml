@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
-    tags: ['**']
   pull_request:
 
 concurrency:
@@ -15,6 +13,8 @@ permissions:
 
 jobs:
   build-and-test:
+    # Same-repository branches are tested on push; fork contributions are tested on PR.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
