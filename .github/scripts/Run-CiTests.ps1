@@ -1,4 +1,4 @@
-param([Parameter(Mandatory = $true)][ValidateSet('core', 'build', 'avalonia', 'wpf')][string]$Suite)
+param([Parameter(Mandatory = $true)][ValidateSet('core', 'build', 'avalonia', 'osr', 'renderer', 'wpf')][string]$Suite)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 if ($MyInvocation.UnboundArguments.Count -ne 0) { throw 'Unexpected arguments.' }
@@ -18,12 +18,14 @@ if ($IsLinux -and [Runtime.InteropServices.RuntimeInformation]::ProcessArchitect
     $env:LD_PRELOAD = $tlsShim
 }
 if ($Suite -eq 'wpf' -and !$IsWindows) { throw 'The WPF suite requires Windows.' }
-if ($Suite -eq 'avalonia' -and $IsMacOS) {
+if ($Suite -in @('avalonia', 'osr', 'renderer') -and $IsMacOS) {
     $inputPath = 'tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/CefGlue.Avalonia.Tests.dll'
-    $arguments = @($inputPath, (Join-Path -Path $resultDirectory -ChildPath 'avalonia.xml'))
+    $arguments = @($inputPath, (Join-Path -Path $resultDirectory -ChildPath "$Suite.xml"), $Suite)
 } else {
     $inputPath = switch ($Suite) {
         'avalonia' { 'tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj' }
+        'osr' { 'tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj' }
+        'renderer' { 'tests/CefGlue.Avalonia.Tests/CefGlue.Avalonia.Tests.csproj' }
         'wpf' { 'tests/CefGlue.WPF.Tests/CefGlue.WPF.Tests.csproj' }
         default { 'tests/CefGlue.Tests/CefGlue.Tests.csproj' }
     }
@@ -31,6 +33,8 @@ if ($Suite -eq 'avalonia' -and $IsMacOS) {
     $arguments = @('test', $inputPath, '-c', 'Release', '--no-build', '-m:1', '--logger', 'trx', '--results-directory', $resultDirectory, '--blame')
     if ($Suite -eq 'core') { $arguments += @('--filter', 'TestCategory!=BuildIntegration') }
     if ($Suite -eq 'build') { $arguments += @('--filter', 'TestCategory=BuildIntegration') }
+    if ($Suite -eq 'osr') { $arguments += @('--filter', 'FullyQualifiedName~CefGlue.Tests.OsrBrowserReviewFixTests.') }
+    if ($Suite -eq 'renderer') { $arguments += @('--filter', 'FullyQualifiedName~CefGlue.Tests.RendererTerminationReviewFixTests.') }
     if ($IsLinux) {
         $executable = 'xvfb-run'
         $arguments = @('--auto-servernum', 'dotnet') + $arguments
@@ -43,3 +47,11 @@ $testExit = $LASTEXITCODE
 if ($testExit -ne 0) { exit $testExit }
 $reports = @(Get-ChildItem -LiteralPath $resultDirectory -File | Where-Object -FilterScript { $_.Extension -in @('.trx', '.xml') -and $_.Length -gt 0 })
 if ($reports.Count -eq 0) { throw 'Tests exited successfully but no test report was produced.' }
+if ($Suite -in @('osr', 'renderer')) {
+    foreach ($report in $reports) {
+        [xml]$xml = Get-Content -LiteralPath $report.FullName -Raw
+        $cases = @($xml.SelectNodes("//*[local-name()='UnitTestResult' or local-name()='test-case']"))
+        $passed = @($cases | Where-Object -FilterScript { $_.GetAttribute('outcome') -eq 'Passed' -or $_.GetAttribute('result') -eq 'Passed' })
+        if ($cases.Count -eq 0 -or $passed.Count -ne $cases.Count) { throw "$Suite must execute its explicit cases without skips: $($report.FullName)" }
+    }
+}

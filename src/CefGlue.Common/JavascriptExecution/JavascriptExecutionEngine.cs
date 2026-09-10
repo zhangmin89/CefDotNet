@@ -54,9 +54,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
         {
             var message = Messages.JsEvaluationResult.FromCefMessage(args.Message);
 
-            var matched = _pendingTasks.TryRemove(message.TaskId, out var pendingTask);
-            if (matched)
+            var matched = false;
+            if (_pendingTasks.TryRemove(message.TaskId, out var pendingTask))
             {
+                matched = true;
                 if (JavascriptExecutionTrace.IsEnabled)
                 {
                     Volatile.Write(ref pendingTask.ResultReceived, 1);

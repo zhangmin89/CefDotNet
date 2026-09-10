@@ -11,25 +11,32 @@ namespace CefGlue.Tests
         [STAThread]
         private static int Main(string[] args)
         {
-            if (args.Length != 1)
+            if (args.Length is < 1 or > 2 || (args.Length == 2 && args[1] is not ("avalonia" or "osr" or "renderer")))
             {
-                Console.Error.WriteLine("Usage: CefGlue.Avalonia.Tests <NUnit result XML path>");
+                Console.Error.WriteLine("Usage: CefGlue.Avalonia.Tests <NUnit result XML path> [avalonia|osr|renderer]");
                 return 1;
             }
 
             try
             {
                 var resultPath = Path.GetFullPath(args[0]);
+                var suite = args.Length == 2 ? args[1] : "avalonia";
+                var filter = suite switch
+                {
+                    "osr" => TestFilter.FromXml($"<filter><class>{typeof(OsrBrowserReviewFixTests).FullName}</class></filter>"),
+                    "renderer" => TestFilter.FromXml($"<filter><class>{typeof(RendererTerminationReviewFixTests).FullName}</class></filter>"),
+                    _ => TestFilter.Empty
+                };
                 // Match the test output directory used by VSTest for relative CEF cache paths.
                 Directory.SetCurrentDirectory(AppContext.BaseDirectory);
-                TestBase.InitializeApplication();
+                TestBase.InitializeApplication(windowlessRenderingEnabled: suite == "osr");
                 // The CI process monitor collects diagnostics before enforcing the timeout.
                 using var lifetime = new CancellationTokenSource();
                 var tests = Task.Run(() =>
                 {
                     var runner = new NUnitTestAssemblyRunner(new DefaultTestAssemblyBuilder());
                     runner.Load(typeof(Program).Assembly, new Dictionary<string, object>());
-                    var result = runner.Run(new ConsoleTestListener(), TestFilter.Empty);
+                    var result = runner.Run(new ConsoleTestListener(), filter);
                     Directory.CreateDirectory(Path.GetDirectoryName(resultPath)!);
                     File.WriteAllText(resultPath, result.ToXml(true).OuterXml);
                     Console.WriteLine($"Passed: {result.PassCount}, Failed: {result.FailCount}, Skipped: {result.SkipCount}; results: {resultPath}");

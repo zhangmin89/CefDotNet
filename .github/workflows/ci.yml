@@ -73,7 +73,11 @@ jobs:
 
       - name: Build
         id: build
-        run: dotnet build $env:CI_SOLUTION -c Release --no-restore -m:1
+        run: dotnet build $env:CI_SOLUTION -c Release --no-restore -m:1 '-flp:logfile=artifacts/build-warnings.log;warningsonly'
+
+      - name: Isolate macOS native class collision
+        if: runner.os == 'macOS'
+        run: ./.github/scripts/Collect-MacNativeDiagnostics.ps1
 
       - name: Prepare and verify CEF loading on Linux ARM64
         id: cef_load
@@ -102,6 +106,22 @@ jobs:
         if: ${{ !cancelled() && runner.os == 'Windows' && steps.build.outcome == 'success' }}
         run: ./.github/scripts/Run-CiTests.ps1 -Suite wpf
 
+      # CEF rendering mode and renderer crashes require separate test processes.
+      - name: Test Avalonia off-screen rendering
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.cef_load.outcome != 'failure' }}
+        run: ./.github/scripts/Run-CiTests.ps1 -Suite osr
+
+      - name: Test renderer termination and recovery
+        if: ${{ !cancelled() && steps.build.outcome == 'success' && steps.cef_load.outcome != 'failure' }}
+        run: ./.github/scripts/Run-CiTests.ps1 -Suite renderer
+
+      - name: Summarize warnings and test phase timings
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: python
+        run: |
+          import subprocess, sys
+          subprocess.run([sys.executable, '.github/scripts/summarize-ci-diagnostics.py', 'artifacts/build-warnings.log', 'artifacts/test-results', '--output', 'artifacts/ci-diagnostics.json'], check=True)
+
       - name: Upload test results and CEF logs
         if: ${{ always() && steps.build.outcome == 'success' }}
         timeout-minutes: 5
@@ -110,5 +130,7 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: |
             artifacts/test-results/
+            artifacts/build-warnings.log
+            artifacts/ci-diagnostics.json
             tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/cef-tests.log
             tests/**/bin/Release/net8.0/**/javascript-execution-*.log

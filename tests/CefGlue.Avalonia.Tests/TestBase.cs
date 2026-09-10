@@ -67,14 +67,18 @@ namespace CefGlue.Tests
 
         internal static void InitializeApplication(bool windowlessRenderingEnabled = false)
         {
-            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { WindowlessRenderingEnabled = windowlessRenderingEnabled, RootCachePath = CacheRoot, LogFile = Path.Combine(AppContext.BaseDirectory, "cef-tests.log") }, customSchemes: new[] {
+            var diagnosticsDirectory = Environment.GetEnvironmentVariable("CEFGLUE_TEST_DIAGNOSTICS_DIR") ?? AppContext.BaseDirectory;
+            TestDiagnostics.Write("application", "cef-initialize-start", $"windowless={windowlessRenderingEnabled} os={System.Runtime.InteropServices.RuntimeInformation.OSDescription} arch={System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+            CefRuntimeLoader.Initialize(settings: new Xilium.CefGlue.CefSettings { WindowlessRenderingEnabled = windowlessRenderingEnabled, RootCachePath = CacheRoot, LogFile = Path.Combine(diagnosticsDirectory, "cef-tests.log") }, customSchemes: new[] {
                 new CustomScheme()
                 {
                     SchemeName = CustomSchemeHandlerFactory.SchemeName,
                     SchemeHandlerFactory = new CustomSchemeHandlerFactory()
                 }
             });
-            AppBuilder.Configure<App>().UsePlatformDetect().SetupWithoutStarting();
+            TestDiagnostics.Write("application", "cef-initialize-complete");
+            AppBuilder.Configure<App>().UsePlatformDetect().LogToTextWriter(Console.Error, Avalonia.Logging.LogEventLevel.Information, "Platform", "OpenGL").SetupWithoutStarting();
+            TestDiagnostics.Write("application", "avalonia-initialize-complete", $"avalonia={typeof(Application).Assembly.GetName().Version}");
             initialized = true;
         }
 
