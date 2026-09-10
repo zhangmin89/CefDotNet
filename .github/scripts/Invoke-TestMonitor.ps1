@@ -7,6 +7,7 @@ param(
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path -Path $PSScriptRoot -ChildPath 'TestProcessTree.ps1')
 if ($MyInvocation.UnboundArguments.Count -ne 0 -or $ArgumentList.Count -eq 0) { throw 'Expected a nonempty command argument array.' }
 $workingDirectory = (Get-Location).Path
 $resultRoot = [IO.Path]::GetFullPath($ResultsDirectory)
@@ -58,7 +59,7 @@ function Close-Capture {
 
 $knownProcesses = @{}
 function Get-TestProcesses {
-    param([int]$RootProcessId)
+    param([int]$RootProcessId, [long]$RootStartTicks, [hashtable]$Known = $knownProcesses)
     $parents = @{}
     if ($IsWindows) {
         foreach ($item in Get-CimInstance -ClassName Win32_Process) { $parents[[int]$item.ProcessId] = [int]$item.ParentProcessId }
@@ -71,44 +72,36 @@ function Get-TestProcesses {
             $parents[[int]$values[0]] = [int]$values[1]
         }
     }
-    $selected = [Collections.Generic.HashSet[int]]::new()
-    $null = $selected.Add($RootProcessId)
-    foreach ($entry in @($knownProcesses.Values)) {
+    $readProcess = {
+        param([int]$Id)
+        $candidate = $null
         try {
-            $candidate = [Diagnostics.Process]::GetProcessById($entry.Id)
-            if ($candidate.StartTime.ToUniversalTime().Ticks -eq $entry.StartTicks) { $null = $selected.Add($entry.Id) }
-            $candidate.Dispose()
+            $candidate = [Diagnostics.Process]::GetProcessById($Id)
+            [pscustomobject]@{ Id = $Id; Name = $candidate.ProcessName; StartTicks = $candidate.StartTime.ToUniversalTime().Ticks; CpuMs = $candidate.TotalProcessorTime.TotalMilliseconds }
         } catch [ArgumentException] { } # A process may exit between snapshots.
+        finally { if ($null -ne $candidate) { $candidate.Dispose() } }
     }
-    do {
-        $added = $false
-        foreach ($id in $parents.Keys) {
-            if ($selected.Contains($parents[$id]) -and $selected.Add($id)) { $added = $true }
-        }
-    } while ($added)
-    foreach ($id in ($selected | Sort-Object)) {
-        try {
-            $candidate = [Diagnostics.Process]::GetProcessById($id)
-            $entry = [pscustomobject]@{ Id = $id; Name = $candidate.ProcessName; StartTicks = $candidate.StartTime.ToUniversalTime().Ticks; CpuMs = $candidate.TotalProcessorTime.TotalMilliseconds }
-            $candidate.Dispose()
-            $knownProcesses[$id] = $entry
-            $entry
-        } catch [ArgumentException] { }
+    $seeds = @([pscustomobject]@{ Id = $RootProcessId; StartTicks = $RootStartTicks }) + @($Known.Values)
+    foreach ($entry in @(Select-TestProcesses -Parents $parents -Seeds $seeds -ReadProcess $readProcess)) {
+        $Known[$entry.Id] = $entry
+        $entry
     }
 }
 
 function Stop-TestProcesses {
     param([object[]]$Processes)
-    foreach ($entry in $Processes) {
+    foreach ($entry in ($Processes | Sort-Object -Property StartTicks -Descending)) {
+        $candidate = $null
         try {
             $candidate = [Diagnostics.Process]::GetProcessById($entry.Id)
             # Never act on a PID that the OS has already reused.
             if ($candidate.StartTime.ToUniversalTime().Ticks -eq $entry.StartTicks) {
-                $candidate.Kill($true)
+                # Kill only verified identities; recursive Kill would walk raw parent PIDs again.
+                $candidate.Kill()
                 if (!$candidate.WaitForExit(10000)) { throw "PID $($entry.Id) did not exit after termination." }
             }
-            $candidate.Dispose()
         } catch [ArgumentException] { }
+        finally { if ($null -ne $candidate) { $candidate.Dispose() } }
     }
 }
 
@@ -138,7 +131,8 @@ function Save-Diagnostics {
             $process = $collector.Capture.Process
             $timedOut = !$process.HasExited
             if ($timedOut) {
-                $process.Kill($true)
+                $collectorTargets = @(Get-TestProcesses -RootProcessId $process.Id -RootStartTicks $process.StartTime.ToUniversalTime().Ticks -Known @{})
+                Stop-TestProcesses -Processes $collectorTargets
                 if (!$process.WaitForExit(10000)) { throw "Collector PID $($process.Id) did not exit." }
             }
             Close-Capture -Capture $collector.Capture
@@ -196,6 +190,7 @@ function Show-CapturedOutput {
 
 $capture = Start-CapturedProcess -Executable $FilePath -Arguments $ArgumentList -Prefix 'test' -TestProcess $true
 $process = $capture.Process
+$rootStartTicks = $process.StartTime.ToUniversalTime().Ticks
 $statePath = Join-Path -Path $resultRoot -ChildPath 'monitor.json'
 $state = [ordered]@{ Pid = $process.Id; WorkingDirectory = $workingDirectory; Executable = $FilePath; Arguments = $ArgumentList; StartedUtc = [DateTime]::UtcNow.ToString('O'); Reason = 'running'; ExitCode = $null; TestExitCode = $null; ActiveTests = @(); ActiveSuites = @(); Stdout = $capture.Stdout; Stderr = $capture.Stderr }
 $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
@@ -209,7 +204,7 @@ try {
         Read-TestEvents
         $state.ActiveTests = @($activeTests.Values)
         $state.ActiveSuites = @($activeSuites.Values)
-        $targets = @(Get-TestProcesses -RootProcessId $process.Id)
+        $targets = @(Get-TestProcesses -RootProcessId $process.Id -RootStartTicks $rootStartTicks)
         $files = @(Get-ChildItem -LiteralPath $resultRoot -File | Where-Object -FilterScript { $_.Extension -in @('.log', '.jsonl') } | Sort-Object -Property Name | ForEach-Object -Process {
             # Windows directory metadata may retain length zero while the writer is open.
             $stream = [IO.File]::Open($_.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
@@ -248,7 +243,7 @@ try {
     if ($state.Reason -eq 'running') { $state.Reason = 'interrupted'; $state.ExitCode = 1 }
     try {
         # Refresh before killing so that children created during collection are included.
-        $targets = @(Get-TestProcesses -RootProcessId $process.Id)
+        $targets = @(Get-TestProcesses -RootProcessId $process.Id -RootStartTicks $rootStartTicks)
         Stop-TestProcesses -Processes $targets
         if (!$process.WaitForExit(10000)) { throw "Test PID $($process.Id) is still alive." }
         $state.TestExitCode = $process.ExitCode

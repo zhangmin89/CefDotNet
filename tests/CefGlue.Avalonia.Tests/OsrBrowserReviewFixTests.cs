@@ -2,7 +2,9 @@ using System;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Avalonia.Controls;
 using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 using NUnit.Framework;
 using Xilium.CefGlue;
 using Xilium.CefGlue.Avalonia.Platform;
@@ -16,6 +18,23 @@ namespace CefGlue.Tests;
 public class OsrBrowserReviewFixTests : BrowserReviewFixTests
 {
     protected override bool WindowlessRenderingEnabled => true;
+
+    [Test]
+    public async Task AttachedOffscreenBrowserHasNativeHostView()
+    {
+        await Run(() =>
+        {
+            var control = (AvaloniaOffScreenControlHost)typeof(CommonBrowserAdapter).GetProperty("Control", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(Adapter)!;
+            var handle = control.GetHostViewHandle(64, 64);
+            Assert.IsNotNull(handle);
+            Assert.AreNotEqual(IntPtr.Zero, handle);
+            if (CefRuntime.Platform == CefRuntimePlatform.MacOS)
+            {
+                var parent = (IMacOSTopLevelPlatformHandle)TopLevel.GetTopLevel(Browser)!.TryGetPlatformHandle()!;
+                Assert.AreEqual(parent.NSView, handle, "OSR must use its owning window's NSView.");
+            }
+        });
+    }
 
     [Test]
     public async Task WindowlessPopupCannotOverwriteMainBitmap()

@@ -1,6 +1,7 @@
 param([Parameter(Mandatory = $true)][string]$DumpToolPath)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+& (Join-Path -Path $PSScriptRoot -ChildPath 'Test-TestProcessTree.ps1')
 if ($MyInvocation.UnboundArguments.Count -ne 0) { throw 'Unexpected arguments.' }
 if (!(Test-Path -LiteralPath $DumpToolPath -PathType Leaf)) { throw "Missing dump tool: $DumpToolPath" }
 $dumpTool = [IO.Path]::GetFullPath($DumpToolPath)
