@@ -2,7 +2,13 @@ name: CI
 
 on:
   push:
+    branches: [main]
+    tags: ['**']
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -22,6 +28,7 @@ jobs:
     env:
       CI_SOLUTION: ${{ startsWith(matrix.os, 'windows-') && 'CefDotNet.slnx' || 'CefDotNet.CrossPlatform.slnf' }}
       CEFGLUE_TRACE_JAVASCRIPT: '1'
+      DOTNET_DUMP_VERSION: '10.0.731102'
 
     steps:
       - name: Checkout repository
@@ -34,6 +41,15 @@ jobs:
             8.0.x
             10.0.400
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('Directory.Packages.props', 'Directory.Build.props', 'Directory.Build.targets', '**/*.csproj') }}
+          # Reuse unchanged packages when the dependency hash changes; restore fills any gaps.
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
       - name: Install Linux browser prerequisites
         if: runner.os == 'Linux'
         shell: bash
@@ -41,8 +57,16 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes xvfb libgtk-3-0 libnss3 libasound2
 
+      - name: Cache test diagnostics tool
+        id: diagnostics_cache
+        uses: actions/cache@v6
+        with:
+          path: artifacts/tools
+          key: ${{ runner.os }}-${{ runner.arch }}-dotnet-dump-${{ env.DOTNET_DUMP_VERSION }}
+
       - name: Install test diagnostics tool
-        run: dotnet tool install dotnet-dump --tool-path artifacts/tools --version 10.0.731102
+        if: steps.diagnostics_cache.outputs.cache-hit != 'true'
+        run: dotnet tool install dotnet-dump --tool-path artifacts/tools --version $env:DOTNET_DUMP_VERSION
 
       - name: Restore
         run: dotnet restore $env:CI_SOLUTION
