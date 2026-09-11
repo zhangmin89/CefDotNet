@@ -59,7 +59,7 @@ function Close-Capture {
 
 $knownProcesses = @{}
 function Get-TestProcesses {
-    param([int]$RootProcessId, [long]$RootStartTicks, [hashtable]$Known = $knownProcesses)
+    param([int]$RootProcessId, [Nullable[long]]$RootStartTicks, [hashtable]$Known = $knownProcesses)
     $parents = @{}
     if ($IsWindows) {
         foreach ($item in Get-CimInstance -ClassName Win32_Process) { $parents[[int]$item.ProcessId] = [int]$item.ParentProcessId }
@@ -81,7 +81,8 @@ function Get-TestProcesses {
         } catch [ArgumentException] { } # A process may exit between snapshots.
         finally { if ($null -ne $candidate) { $candidate.Dispose() } }
     }
-    $seeds = @([pscustomobject]@{ Id = $RootProcessId; StartTicks = $RootStartTicks }) + @($Known.Values)
+    $seeds = @($Known.Values)
+    if ($null -ne $RootStartTicks) { $seeds += [pscustomobject]@{ Id = $RootProcessId; StartTicks = $RootStartTicks } }
     foreach ($entry in @(Select-TestProcesses -Parents $parents -Seeds $seeds -ReadProcess $readProcess)) {
         $Known[$entry.Id] = $entry
         $entry
@@ -209,7 +210,7 @@ function Show-CapturedOutput {
 
 $capture = Start-CapturedProcess -Executable $FilePath -Arguments $ArgumentList -Prefix 'test' -TestProcess $true
 $process = $capture.Process
-$rootStartTicks = $process.StartTime.ToUniversalTime().Ticks
+$rootStartTicks = $null
 $statePath = Join-Path -Path $resultRoot -ChildPath 'monitor.json'
 $state = [ordered]@{ Pid = $process.Id; WorkingDirectory = $workingDirectory; Executable = $FilePath; Arguments = $ArgumentList; StartedUtc = [DateTime]::UtcNow.ToString('O'); Reason = 'running'; ExitCode = $null; TestExitCode = $null; ActiveTests = @(); ActiveSuites = @(); Stdout = $capture.Stdout; Stderr = $capture.Stderr }
 $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $statePath -Encoding utf8
@@ -219,6 +220,10 @@ $previous = $null
 $idle = 0
 $targets = @()
 try {
+    # Unix may no longer provide StartTime when a short-lived process has already exited.
+    $startTime = $process.StartTime
+    if ($null -ne $startTime) { $rootStartTicks = $startTime.ToUniversalTime().Ticks }
+    elseif (!$process.HasExited) { throw "Start time is unavailable for running PID $($process.Id)." }
     while ($true) {
         Read-TestEvents
         $state.ActiveTests = @($activeTests.Values)

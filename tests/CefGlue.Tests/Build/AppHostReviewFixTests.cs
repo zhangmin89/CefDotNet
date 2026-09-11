@@ -1,5 +1,4 @@
 using System.Reflection.PortableExecutable;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -14,7 +13,7 @@ public class AppHostReviewFixTests
     [TestCase(true)]
     public async Task FailedStackPatchDoesNotPublishAnIncompleteHostAndRetryRepairsIt(bool existingHost)
     {
-        var repository = RepositoryRoot();
+        var repository = TestRepository.Root;
         var root = Path.GetFullPath(Path.Combine(repository, "artifacts", "apphost-review-" + Guid.NewGuid().ToString("N")));
         Assert.IsFalse(Directory.Exists(root));
         TestContext.Progress.WriteLine($"CREATE {root}");
@@ -99,6 +98,4 @@ public class AppHostReviewFixTests
         Assert.AreEqual(8388608, pe.PEHeaders.PEHeader!.SizeOfStackReserve);
         Assert.AreEqual(Subsystem.WindowsGui, pe.PEHeaders.PEHeader.Subsystem);
     }
-
-    private static string RepositoryRoot([CallerFilePath] string source = "") => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", ".."));
 }

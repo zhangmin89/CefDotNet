@@ -1,5 +1,4 @@
 using System.IO.Compression;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
@@ -41,9 +40,9 @@ namespace CefGlue.Tests.Build
         public string PackagePath => Path.Combine(Feed, $"CefGlue.Common.{Version}.nupkg");
         public string HostName => "Xilium.CefGlue.BrowserProcess" + (NativeRid.StartsWith("win-") ? ".exe" : "");
 
-        public static async Task<BrowserProcessTestWorkspace> CreateAsync([CallerFilePath] string sourceFile = "")
+        public static async Task<BrowserProcessTestWorkspace> CreateAsync()
         {
-            var repo = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, "..", "..", ".."));
+            var repo = TestRepository.Root;
             Assert.IsTrue(File.Exists(Path.Combine(repo, "CefDotNet.slnx")), $"Tests require a repository checkout: {repo}");
             var root = Path.Combine(repo, "artifacts", "browser-process-nunit-" + Guid.NewGuid().ToString("N"));
             var workspace = new BrowserProcessTestWorkspace(repo, root, Path.Combine(root, "feed"), Path.Combine(root, "packages"), "0.0.0-browserprocess." + Guid.NewGuid().ToString("N"));

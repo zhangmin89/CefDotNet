@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Xml.Linq;
@@ -12,7 +11,7 @@ namespace CefGlue.Tests.Build
         [TestCaseSource(typeof(BrowserProcessTestWorkspace), nameof(BrowserProcessTestWorkspace.RuntimeIdentifiers))]
         public async Task DepsTaskPreservesManagedDependenciesAndAddsRuntimePack(string rid)
         {
-            var repository = RepositoryRoot();
+            var repository = TestRepository.Root;
             var root = Path.Combine(repository, "artifacts", "browser-process-deps-" + Guid.NewGuid().ToString("N"));
             Assert.IsFalse(Directory.Exists(root));
             TestContext.Progress.WriteLine($"CREATE {root}");
@@ -51,7 +50,5 @@ namespace CefGlue.Tests.Build
 
             XElement Asset(string type, string path) => new("RuntimePackAsset", new XAttribute("Include", path), new XElement("NuGetPackageId", package), new XElement("NuGetPackageVersion", Version), new XElement("AssetType", type), new XElement("DestinationSubPath", path));
         }
-
-        private static string RepositoryRoot([CallerFilePath] string source = "") => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(source)!, "..", "..", ".."));
     }
 }

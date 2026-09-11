@@ -431,6 +431,7 @@ x64/
 x86/
 CodeCoverage/
 .codex-command-records/
+.codex-requests/
 
 # CEF/Chromium data generated when launching from the repository root
 /DawnCache/
