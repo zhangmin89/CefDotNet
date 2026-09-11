@@ -14,10 +14,17 @@ permissions:
 jobs:
   build-and-test:
     # Same-repository branches are tested on push; fork contributions are tested on PR.
+    # Keep push validation for every branch without running the matrix twice for same-repo PRs.
+    # Tradeoff: same-repo PRs validate the branch head, not the synthetic merge commit.
+    # Fork PRs validate the merge commit. Changing this policy requires PR-aware push gating.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
     name: Build and test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    # Runs 34560991497 / 34565425123: slowest job 10m45s, including post-job steps.
+    # Budget: 11m baseline + 7m cold-cache variance + 5m monitor self-test
+    # + 10m watchdog + 2m diagnostics/cleanup + 5m upload = 40m.
+    # This is an operational allowance, not a bound for multiple suites hanging in succession.
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -34,8 +41,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Verify test process ownership
-        run: ./.github/scripts/tests/Test-TestProcessTree.ps1
+      - name: Test CI diagnostics summarizer
+        shell: python
+        run: |
+          import subprocess, sys
+          subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', '.github/scripts/tests', '-p', 'test_ci_diagnostics.py', '-v'], check=True)
 
       - name: Set up .NET SDK and test runtime
         uses: actions/setup-dotnet@v6
@@ -70,6 +80,31 @@ jobs:
       - name: Install test diagnostics tool
         if: steps.diagnostics_cache.outputs.cache-hit != 'true'
         run: dotnet tool install dotnet-dump --tool-path artifacts/tools --version $env:DOTNET_DUMP_VERSION
+
+      # Includes process-ownership tests and real timeout/dump/child-cleanup checks.
+      - name: Test CI monitor
+        id: monitor_self_test
+        timeout-minutes: 5
+        run: |
+          $toolName = if ($IsWindows) { 'dotnet-dump.exe' } else { 'dotnet-dump' }
+          $commandToken = [Guid]::NewGuid().ToString('N')
+          # The fixture intentionally emits ::error::; preserve its output without false annotations.
+          Write-Output "::stop-commands::$commandToken"
+          try {
+            pwsh -NoProfile -File ./.github/scripts/tests/Test-TestMonitor.ps1 -DumpToolPath "artifacts/tools/$toolName"
+            $testExit = $LASTEXITCODE
+          } finally {
+            Write-Output "::${commandToken}::"
+          }
+          exit $testExit
+
+      - name: Upload failed monitor self-test diagnostics
+        if: ${{ always() && steps.monitor_self_test.outcome == 'failure' }}
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-monitor-self-test-${{ matrix.os }}
+          path: artifacts/monitor-self-test-*/
 
       - name: Restore
         run: dotnet restore $env:CI_SOLUTION
@@ -135,5 +170,4 @@ jobs:
             artifacts/test-results/
             artifacts/build-warnings.log
             artifacts/ci-diagnostics.json
-            tests/CefGlue.Avalonia.Tests/bin/Release/net8.0/cef-tests.log
             tests/**/bin/Release/net8.0/**/javascript-execution-*.log

@@ -28,7 +28,10 @@ namespace Xilium.CefGlue.Common.InternalHandlers
                 JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-error-received", $"browser={browser.Identifier} main={frame.IsMain} error={errorCode} urlLength={failedUrl.Length}");
             }
             _owner.HandleLoadError(browser, frame, errorCode, errorText, failedUrl);
-            JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-error-dispatched", "");
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-error-dispatched", "");
+            }
         }
 
         protected override void OnLoadStart(CefBrowser browser, CefFrame frame, CefTransitionType transitionType)
@@ -39,7 +42,10 @@ namespace Xilium.CefGlue.Common.InternalHandlers
                 JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-start-received", $"browser={browser.Identifier} main={frame.IsMain} urlLength={frame.Url.Length} transition={transitionType}");
             }
             _owner.HandleLoadStart(browser, frame, transitionType);
-            JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-start-dispatched", "");
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-start-dispatched", "");
+            }
         }
 
         protected override void OnLoadEnd(CefBrowser browser, CefFrame frame, int httpStatusCode)
@@ -50,7 +56,10 @@ namespace Xilium.CefGlue.Common.InternalHandlers
                 JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-end-received", $"browser={browser.Identifier} main={frame.IsMain} urlLength={frame.Url.Length} status={httpStatusCode}");
             }
             _owner.HandleLoadEnd(browser, frame, httpStatusCode);
-            JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-end-dispatched", "");
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-load-end-dispatched", "");
+            }
         }
     }
 }
