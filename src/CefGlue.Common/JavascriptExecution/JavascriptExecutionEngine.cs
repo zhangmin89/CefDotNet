@@ -146,7 +146,7 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             {
                 if (JavascriptExecutionTrace.IsEnabled)
                 {
-                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} browser={pendingEvaluation.BrowserIdentifier} main={frame.IsMain}");
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} browser={pendingEvaluation.BrowserIdentifier}");
                 }
                 var cefMessage = message.ToCefProcessMessage();
                 frame.SendProcessMessage(CefProcessId.Renderer, cefMessage);
