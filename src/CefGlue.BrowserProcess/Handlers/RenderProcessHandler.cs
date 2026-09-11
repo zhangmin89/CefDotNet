@@ -45,6 +45,10 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
 
         protected override void OnContextCreated(CefBrowser browser, CefFrame frame, CefV8Context context)
         {
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-created", $"browser={browser.Identifier} main={frame.IsMain}");
+            }
             WithErrorHandling(() =>
             {
                 using (CefObjectTracker.StartTracking())
@@ -54,13 +58,25 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
 
                     var message = new Messages.JsContextCreated();
                     var cefMessage = message.ToCefProcessMessage();
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-created-send-start", $"browser={browser.Identifier} main={frame.IsMain}");
+                    }
                     frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-created-send-returned", $"browser={browser.Identifier}");
+                    }
                 }
             }, frame);
         }
 
         protected override void OnContextReleased(CefBrowser browser, CefFrame frame, CefV8Context context)
         {
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-released", $"browser={browser.Identifier} main={frame.IsMain}");
+            }
             WithErrorHandling(() =>
             {
                 using (CefObjectTracker.StartTracking())
@@ -70,7 +86,15 @@ namespace Xilium.CefGlue.BrowserProcess.Handlers
 
                     var message = new Messages.JsContextReleased();
                     var cefMessage = message.ToCefProcessMessage();
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-released-send-start", $"browser={browser.Identifier} main={frame.IsMain}");
+                    }
                     frame.SendProcessMessage(CefProcessId.Browser, cefMessage);
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, frame.Identifier, "renderer-context-released-send-returned", $"browser={browser.Identifier}");
+                    }
                 }
             }, frame);
         }

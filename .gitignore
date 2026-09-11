@@ -430,3 +430,4 @@ FodyWeavers.xsd
 x64/
 x86/
 CodeCoverage/
+.codex-command-records/

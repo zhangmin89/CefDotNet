@@ -36,7 +36,7 @@ def summarize(entries, root):
     intervals = []
     signals = []
     for name, contents in entries:
-        previous = {}
+        phases = {}
         counts = Counter()
         for line in contents.splitlines():
             match = WARNING.search(line)
@@ -58,16 +58,20 @@ def summarize(entries, root):
                 if match:
                     ticks, frequency, pid, test, stage = match.groups()
                     key = (pid, test)
-                    if key in previous:
-                        old_ticks, old_frequency, old_stage = previous[key]
-                        if int(frequency) != old_frequency or int(ticks) < old_ticks:
-                            raise ValueError(f"Invalid monotonic phase timestamps in {name}")
-                        intervals.append(dict(log=name, test=test, start=old_stage, end=stage, seconds=(int(ticks) - old_ticks) / int(frequency)))
-                    previous[key] = (int(ticks), int(frequency), stage)
+                    phases.setdefault(key, []).append((int(ticks), int(frequency), stage))
             if name.endswith((".stderr.log", "cef-tests.log")):
                 for signal, text in SIGNALS.items():
                     if text in line:
                         counts[signal] += 1
+        for (_, test), records in phases.items():
+            # Threads capture timestamps before acquiring the synchronized writer.
+            records.sort(key=lambda record: record[0])
+            for previous, current in zip(records, records[1:]):
+                old_ticks, old_frequency, old_stage = previous
+                ticks, frequency, stage = current
+                if frequency != old_frequency:
+                    raise ValueError(f"Invalid monotonic phase timestamps in {name}")
+                intervals.append(dict(log=name, test=test, start=old_stage, end=stage, seconds=(ticks - old_ticks) / frequency))
         if counts:
             signals.append(dict(log=name, matching_lines=dict(counts)))
     ordered = [warnings[key] for key in sorted(warnings)]

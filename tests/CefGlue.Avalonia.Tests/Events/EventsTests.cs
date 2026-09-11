@@ -1,4 +1,5 @@
 ﻿using Avalonia.Controls;
+using CefGlue.Tests.Helpers;
 using NUnit.Framework;
 using System.Threading.Tasks;
 using Xilium.CefGlue.Common.Events;
@@ -161,6 +162,7 @@ namespace CefGlue.Tests.Events
         [Test]
         public async Task JavascriptContextCreatedAreFiredWhenLoadingNewContent()
         {
+            var testName = TestContext.CurrentContext.Test.FullName;
             var contextCreatedCalls = 0;
             var contextCreatedEventsCompletionSource = new TaskCompletionSource<bool>();
 
@@ -171,6 +173,7 @@ namespace CefGlue.Tests.Events
                     contextCreatedCalls++;
                 }
 
+                TestDiagnostics.Write(testName, "context-created-observed", $"frame={e.Frame.Identifier} main={e.Frame.IsMain} count={contextCreatedCalls}");
                 if (contextCreatedCalls == 2)
                 {
                     contextCreatedEventsCompletionSource.SetResult(true);
@@ -181,9 +184,15 @@ namespace CefGlue.Tests.Events
             {
                 Browser.JavascriptContextCreated += OnJavascriptContextCreated;
 
+                TestDiagnostics.Write(testName, "first-navigation-start");
                 await Browser.LoadContent($"<script>1+1</script>");
+                TestDiagnostics.Write(testName, "first-navigation-loaded", $"contexts={contextCreatedCalls}");
+                TestDiagnostics.Write(testName, "second-navigation-start");
                 await Browser.LoadContent($"<html/>");
+                TestDiagnostics.Write(testName, "second-navigation-loaded", $"contexts={contextCreatedCalls}");
+                TestDiagnostics.Write(testName, "context-pair-wait", $"contexts={contextCreatedCalls}");
                 await contextCreatedEventsCompletionSource.Task;
+                TestDiagnostics.Write(testName, "context-pair-complete", $"contexts={contextCreatedCalls}");
             }
             finally
             {

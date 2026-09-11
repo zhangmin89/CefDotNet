@@ -79,12 +79,24 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
 
         private void HandleContextCreatedMessage(MessageReceivedEventArgs args)
         {
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, args.Frame.Identifier, "browser-context-created-received", $"browser={args.Browser.Identifier} main={args.Frame.IsMain}");
+            }
             ContextCreated?.Invoke(args.Frame);
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, args.Frame.Identifier, "browser-context-created-dispatched", $"browser={args.Browser.Identifier}");
+            }
         }
 
         private void HandleContextReleasedMessage(MessageReceivedEventArgs args)
         {
             var frameIdentifier = args.Frame.Identifier;
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-context-released-received", $"browser={args.Browser.Identifier} main={args.Frame.IsMain}");
+            }
             foreach (var pendingTaskEntry in _pendingTasks.ToArray())
             {
                 if (pendingTaskEntry.Value.FrameIdentifier == frameIdentifier && _pendingTasks.TryRemove(pendingTaskEntry.Key, out var pendingTask))
@@ -98,6 +110,10 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             }
 
             ContextReleased?.Invoke(args.Frame);
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, frameIdentifier, "browser-context-released-dispatched", $"browser={args.Browser.Identifier}");
+            }
         }
 
         private void HandleUncaughtExceptionMessage(MessageReceivedEventArgs args)
@@ -130,7 +146,7 @@ namespace Xilium.CefGlue.Common.JavascriptExecution
             {
                 if (JavascriptExecutionTrace.IsEnabled)
                 {
-                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"}");
+                    JavascriptExecutionTrace.Write(taskId, pendingEvaluation.FrameIdentifier, "browser-send-start", $"timeoutMs={timeout?.TotalMilliseconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"} browser={pendingEvaluation.BrowserIdentifier} main={frame.IsMain}");
                 }
                 var cefMessage = message.ToCefProcessMessage();
                 frame.SendProcessMessage(CefProcessId.Renderer, cefMessage);

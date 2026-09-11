@@ -30,6 +30,28 @@ class CiDiagnosticsTests(unittest.TestCase):
         result = MODULE.summarize([("test-phases-1.log", contents), ("test.stdout.log", contents)], ROOT)
         self.assertEqual([10.0, 2.0], [row["seconds"] for row in result["slowest_phase_intervals"]])
 
+    def test_phase_timing_uses_timestamps_when_threads_write_out_of_order(self):
+        contents = "\n".join([
+            "ticks=537042750000 frequency=1000000000 pid=6154 thread=19 test=A stage=resource-handler-start",
+            "ticks=537042760239 frequency=1000000000 pid=6154 thread=21 test=A stage=fetch-script-complete",
+            "ticks=537042756167 frequency=1000000000 pid=6154 thread=19 test=A stage=resource-handler-returned",
+        ])
+        result = MODULE.summarize([("test-phases-6154.log", contents)], ROOT)
+        phases = result["slowest_phase_intervals"]
+        self.assertEqual(2, len(phases))
+        self.assertEqual(("resource-handler-start", "resource-handler-returned"), (phases[0]["start"], phases[0]["end"]))
+        self.assertAlmostEqual(0.000006167, phases[0]["seconds"])
+        self.assertEqual(("resource-handler-returned", "fetch-script-complete"), (phases[1]["start"], phases[1]["end"]))
+        self.assertAlmostEqual(0.000004072, phases[1]["seconds"])
+
+    def test_phase_timing_rejects_inconsistent_clock_frequencies(self):
+        contents = "\n".join([
+            "ticks=100 frequency=10 pid=1 thread=3 test=A stage=start",
+            "ticks=200 frequency=20 pid=1 thread=4 test=A stage=end",
+        ])
+        with self.assertRaisesRegex(ValueError, "Invalid monotonic phase timestamps"):
+            MODULE.summarize([("test-phases-1.log", contents)], ROOT)
+
 
 if __name__ == "__main__":
     unittest.main()
