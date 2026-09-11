@@ -39,6 +39,8 @@ jobs:
 
     steps:
       - name: Checkout repository
+        # The runner applies this timeout to checkout's post-job cleanup too.
+        timeout-minutes: 2
         uses: actions/checkout@v7
 
       - name: Test CI diagnostics summarizer

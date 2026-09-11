@@ -112,7 +112,7 @@ function Save-Diagnostics {
     foreach ($entry in $Processes) {
         if ($entry.Name -match '(?i)dotnet|testhost|cefglue|pwsh') {
             $dumpPath = Join-Path -Path $resultRoot -ChildPath "process-$($entry.Id).dmp"
-            $capture = Start-CapturedProcess -Executable $dumpTool -Arguments @('collect', '--process-id', [string]$entry.Id, '--type', 'Mini', '--output', $dumpPath) -Prefix "dump-$($entry.Id)"
+            $capture = Start-CapturedProcess -Executable $dumpTool -Arguments @('collect', '--process-id', [string]$entry.Id, '--type', 'Mini', '--output', $dumpPath, '--diag') -Prefix "dump-$($entry.Id)"
             $collectors += [pscustomobject]@{ Capture = $capture; Target = $entry.Id; Kind = 'dump'; Artifact = $dumpPath }
             if ($IsMacOS) {
                 $samplePath = Join-Path -Path $resultRoot -ChildPath "sample-$($entry.Id).txt"
@@ -125,6 +125,25 @@ function Save-Diagnostics {
         if ($collectors.Count -gt 0) {
             $tasks = [Threading.Tasks.Task[]]@($collectors | ForEach-Object -Process { $_.Capture.Process.WaitForExitAsync() })
             $null = [Threading.Tasks.Task]::WaitAll($tasks, 60000)
+        }
+        if (@($collectors | Where-Object -FilterScript { $_.Kind -eq 'dump' -and !$_.Capture.Process.HasExited }).Count -gt 0) {
+            # createdump is spawned by the target runtime, not by the dotnet-dump client.
+            $diagnosticProcesses = @(foreach ($entry in $Processes) {
+                Get-TestProcesses -RootProcessId $entry.Id -RootStartTicks $entry.StartTicks
+            }) | Sort-Object -Property Id -Unique
+            $diagnosticProcesses | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path -Path $resultRoot -ChildPath 'diagnostic-processes.json') -Encoding utf8
+            if ($IsMacOS) {
+                $samples = @(foreach ($entry in $diagnosticProcesses | Where-Object -FilterScript { $_.Name -eq 'createdump' }) {
+                    $samplePath = Join-Path -Path $resultRoot -ChildPath "sample-createdump-$($entry.Id).txt"
+                    $capture = Start-CapturedProcess -Executable '/usr/bin/sample' -Arguments @([string]$entry.Id, '1', '-file', $samplePath) -Prefix "sample-createdump-$($entry.Id)"
+                    [pscustomobject]@{ Capture = $capture; Target = $entry.Id; Kind = 'sample'; Artifact = $samplePath }
+                })
+                $collectors += $samples
+                if ($samples.Count -gt 0) {
+                    $tasks = [Threading.Tasks.Task[]]@($samples | ForEach-Object -Process { $_.Capture.Process.WaitForExitAsync() })
+                    $null = [Threading.Tasks.Task]::WaitAll($tasks, 10000)
+                }
+            }
         }
     } finally {
         $statuses = @(foreach ($collector in $collectors) {

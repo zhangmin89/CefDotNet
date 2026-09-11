@@ -6,17 +6,24 @@ if ($MyInvocation.UnboundArguments.Count -ne 0) { throw 'Unexpected arguments.' 
 if (!(Test-Path -LiteralPath $DumpToolPath -PathType Leaf)) { throw "Missing dump tool: $DumpToolPath" }
 $dumpTool = [IO.Path]::GetFullPath($DumpToolPath)
 $monitor = [IO.Path]::GetFullPath([IO.Path]::Combine($PSScriptRoot, '../Invoke-TestMonitor.ps1'))
-$fixture = Join-Path -Path $PSScriptRoot -ChildPath 'MonitorFixture.ps1'
-foreach ($inputPath in @($monitor, $fixture)) {
+$fixtureProject = Join-Path -Path $PSScriptRoot -ChildPath 'MonitorFixture/MonitorFixture.csproj'
+foreach ($inputPath in @($monitor, $fixtureProject)) {
     if (!(Test-Path -LiteralPath $inputPath -PathType Leaf)) { throw "Missing input: $inputPath" }
 }
 $testRoot = [IO.Path]::GetFullPath([IO.Path]::Combine((Get-Location).Path, 'artifacts/monitor-self-test-' + [Guid]::NewGuid().ToString('N')))
 Write-Output "CREATE $testRoot"
 $null = New-Item -ItemType Directory -Path $testRoot
+# Exercise the repository's .NET runtime on every OS, not the runner's bundled PowerShell runtime.
+$fixtureArtifacts = Join-Path -Path $testRoot -ChildPath 'fixture'
+& dotnet build $fixtureProject -c Release --artifacts-path $fixtureArtifacts -m:1 -nr:false
+$buildExit = $LASTEXITCODE
+if ($buildExit -ne 0) { throw "Monitor fixture build failed: exit $buildExit" }
+$fixture = Join-Path -Path $fixtureArtifacts -ChildPath 'bin/MonitorFixture/release/MonitorFixture.dll'
+if (!(Test-Path -LiteralPath $fixture -PathType Leaf)) { throw "Missing built fixture: $fixture" }
 foreach ($mode in @('success', 'failure', 'sequence', 'hang')) {
     $casePath = Join-Path -Path $testRoot -ChildPath "$mode.json"
     $resultPath = Join-Path -Path $testRoot -ChildPath $mode
-    $parameters = @{ FilePath = 'pwsh'; ArgumentList = @('-NoProfile', '-File', $fixture, '-Mode', $mode, '-OutputDirectory', $testRoot); ResultsDirectory = $resultPath; DumpToolPath = $dumpTool; TimeoutSeconds = 15 }
+    $parameters = @{ FilePath = 'dotnet'; ArgumentList = @($fixture, $mode, $testRoot); ResultsDirectory = $resultPath; DumpToolPath = $dumpTool; TimeoutSeconds = 15 }
     $parameters | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $casePath -Encoding utf8
     # Use JSON across the process boundary, then splat the argument array in one PowerShell process.
     $launcherPath = Join-Path -Path $testRoot -ChildPath "$mode.ps1"
@@ -47,8 +54,11 @@ exit $runExit
             if ($remaining.StartTime.ToUniversalTime().Ticks -eq $child.StartTicks) { throw "Child PID $($child.Id) survived timeout." }
         } catch [ArgumentException] { }
         $diagnostics = @(Get-Content -LiteralPath (Join-Path -Path $resultPath -ChildPath 'diagnostics.json') -Raw | ConvertFrom-Json)
-        if (@($diagnostics | Where-Object -FilterScript { $_.Kind -eq 'dump' -and $_.Success }).Count -lt 2) { throw 'Expected real dumps of both the hung parent and child.' }
+        foreach ($targetId in @($state.Pid, $child.Id)) {
+            if (@($diagnostics | Where-Object -FilterScript { $_.Target -eq $targetId -and $_.Kind -eq 'dump' -and $_.Success }).Count -ne 1) { throw "Expected a real dump of fixture PID $targetId." }
+        }
     }
     Write-Output "VERIFIED $mode; exit=$actualExit"
 }
 Write-Output "VERIFIED normal exit, failure propagation, sequential tests exceeding the aggregate limit, per-test timeout despite continued output, real dump collection and child termination. Results: $testRoot"
+exit 0
