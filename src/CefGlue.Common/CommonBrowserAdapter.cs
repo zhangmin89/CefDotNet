@@ -194,17 +194,35 @@ namespace Xilium.CefGlue.Common
             // Remove leading whitespace from the URL
             url = url.TrimStart();
 
+            if (JavascriptExecutionTrace.IsEnabled)
+            {
+                JavascriptExecutionTrace.Write(0, 0, "browser-navigation-requested", $"urlLength={url.Length}");
+            }
+
             // to play safe, load url must be called after OnBrowserCreated(CefBrowser) which runs on CefThreadId.UI, 
             // otherwise the navigation will be aborted
             ActionTask.Run(() =>
             {
                 if (IsInitialized)
                 {
+                    var browserIdentifier = JavascriptExecutionTrace.IsEnabled ? _browser.Identifier : 0;
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, 0, "browser-navigation-executing", $"browser={browserIdentifier} urlLength={url.Length}");
+                    }
                     _browser?.GetMainFrame()?.LoadUrl(url);
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, 0, "browser-navigation-returned", $"browser={browserIdentifier} urlLength={url.Length}");
+                    }
                 }
                 else
                 {
                     _initialUrl = url;
+                    if (JavascriptExecutionTrace.IsEnabled)
+                    {
+                        JavascriptExecutionTrace.Write(0, 0, "browser-navigation-deferred", $"urlLength={url.Length}");
+                    }
                 }
             });
         }

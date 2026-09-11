@@ -100,18 +100,22 @@ namespace CefGlue.Tests.Network
             public string RedirectUrl { get; set; }
         }
 
-        private Task<Response> GetResponse()
+        private async Task<Response> GetResponse(Func<CefRequest, DefaultResourceHandler> resourceHandler)
         {
             var testName = TestContext.CurrentContext.Test.FullName;
             TestDiagnostics.Write(testName, "response-start");
-            var taskCompletion = new TaskCompletionSource<Response>();
+            TestDiagnostics.Write(testName, "page-load-start");
+            await Browser.LoadContent("<html/>").WaitAsync(TimeSpan.FromSeconds(10));
+            TestDiagnostics.Write(testName, "page-load-complete");
+            Browser.RequestHandler = new TestsRequestHandler(resourceHandler);
+            var taskCompletion = new TaskCompletionSource<Response>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             Browser.ConsoleMessage += OnConsoleMessage;
             TestDiagnostics.Write(testName, "console-handler-attached");
 
             void OnConsoleMessage(object sender, ConsoleMessageEventArgs message)
             {
-                TestDiagnostics.Write(testName, "console-message-received");
+                TestDiagnostics.Write(testName, "console-message-received", message.Message);
                 Browser.ConsoleMessage -= OnConsoleMessage;
                 var messageParts = message.Message.Split("|");
                 if (messageParts.Length == 4)
@@ -142,34 +146,32 @@ namespace CefGlue.Tests.Network
                 "   }" +
                 "   console.log(result.concat([ '' ]).join('|'));" +
                 "}).catch(error => console.log(String(error)))";
-            TestDiagnostics.Write(testName, "page-load-start");
-            Browser.LoadContent("<html/>");
-            TestDiagnostics.Write(testName, "page-load-returned");
-            TestDiagnostics.Write(testName, "fetch-script-start");
-            var evaluation = EvaluateJavascript<int>(script);
-            _ = evaluation.ContinueWith(task => TestDiagnostics.Write(testName, "fetch-script-complete", $"status={task.Status}"), TaskScheduler.Default);
-            TestDiagnostics.Write(testName, "response-wait");
-
-            return taskCompletion.Task.ContinueWith(t =>
+            try
+            {
+                TestDiagnostics.Write(testName, "fetch-script-start");
+                await EvaluateJavascript<int>(script).WaitAsync(TimeSpan.FromSeconds(10));
+                TestDiagnostics.Write(testName, "fetch-script-complete");
+                TestDiagnostics.Write(testName, "response-wait");
+                var response = await taskCompletion.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                TestDiagnostics.Write(testName, "response-complete");
+                return response;
+            }
+            finally
             {
                 Browser.ConsoleMessage -= OnConsoleMessage;
-                TestDiagnostics.Write(testName, "response-complete");
-                return t.Result;
-            });
+            }
         }
 
         [Test]
         public async Task ResourceHandlerIsCalledWithStatusOk()
         {
             const string Data = "test";
-            Browser.RequestHandler = new TestsRequestHandler(_ =>
+            var response = await GetResponse(_ =>
             {
                 var handler = new DefaultResourceHandler();
                 handler.Response = StreamHelper.GetStream(Data);
                 return handler;
             });
-
-            var response = await GetResponse();
 
             Assert.AreEqual("*", response.AllowOrigin);
             Assert.AreEqual("200", response.Status);
@@ -181,9 +183,7 @@ namespace CefGlue.Tests.Network
         {
             var testName = TestContext.CurrentContext.Test.FullName;
             TestDiagnostics.Write(testName, "test-body-start");
-            Browser.RequestHandler = new TestsRequestHandler(_ => new DefaultResourceHandler());
-
-            var response = await GetResponse();
+            var response = await GetResponse(_ => new DefaultResourceHandler());
 
             StringAssert.Contains("Error", response.Data);
             TestDiagnostics.Write(testName, "test-body-complete");
@@ -194,7 +194,7 @@ namespace CefGlue.Tests.Network
         {
             const string RedirectUrl = "http://test/otherurl";
 
-            Browser.RequestHandler = new TestsRequestHandler(request =>
+            var response = await GetResponse(request =>
             {
                 var handler = new DefaultResourceHandler();
                 if (request.Url == RedirectUrl)
@@ -208,8 +208,7 @@ namespace CefGlue.Tests.Network
                 return handler;
             });
 
-            var response = await GetResponse();
-
+            Assert.IsNotNull(response.RedirectUrl, $"Fetch did not produce a redirect response: {response.Data}");
             StringAssert.Contains(RedirectUrl, response.RedirectUrl);
         }
 
