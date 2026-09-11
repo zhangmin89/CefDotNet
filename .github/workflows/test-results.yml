@@ -1,0 +1,44 @@
+name: Test Results
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  publish:
+    name: Publish test results
+    if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      checks: write
+    steps:
+      # Read artifacts from the triggering run, including fork PRs. Never execute PR code here.
+      - name: Download test results
+        uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          pattern: test-results-*
+          path: reports
+
+      - name: Publish TRX and NUnit results
+        uses: EnricoMi/publish-unit-test-result-action@d0a4676d0e0b938bc201470d88276b7c74c712b3 # v2.24.0
+        with:
+          commit: ${{ github.event.workflow_run.head_sha }}
+          check_name: Test Results (${{ github.event.workflow_run.event }})
+          comment_mode: 'off'
+          compare_to_earlier_commit: 'false'
+          report_individual_runs: 'true'
+          action_fail_on_inconclusive: 'true'
+          # Only suite reports: exclude VSTest blame/sequence XML and other attachments.
+          files: |
+            reports/*/artifacts/test-results/*/*/*.trx
+            reports/*/artifacts/test-results/*/*/avalonia.xml
+            reports/*/artifacts/test-results/*/*/osr.xml
+            reports/*/artifacts/test-results/*/*/renderer.xml

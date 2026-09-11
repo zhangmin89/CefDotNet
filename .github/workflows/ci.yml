@@ -52,9 +52,9 @@ jobs:
       - name: Set up .NET SDK and test runtime
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.400
+          global-json-file: global.json
+          # Install the .NET 8 runtime needed by the net8.0 test projects.
+          dotnet-version: 8.0.x
 
       - name: Cache NuGet packages
         uses: actions/cache@v6

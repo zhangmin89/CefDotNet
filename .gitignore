@@ -431,3 +431,17 @@ x64/
 x86/
 CodeCoverage/
 .codex-command-records/
+
+# CEF/Chromium data generated when launching from the repository root
+/DawnCache/
+/DawnGraphiteCache/
+/DawnWebGPUCache/
+/GPUCache/
+/ShaderCache/
+/GrShaderCache/
+/Cache/
+/Code Cache/
+/Local Storage/
+/Session Storage/
+/IndexedDB/
+/Service Worker/

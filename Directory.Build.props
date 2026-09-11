@@ -23,5 +23,7 @@
         <!-- 构建 -->
         <Deterministic>true</Deterministic>
         <DebugType>portable</DebugType>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
     </PropertyGroup>
 </Project>
