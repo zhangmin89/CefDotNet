@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Dynamic;
 using System.Globalization;
 using System.Threading.Tasks;
+using CefGlue.Tests.Helpers;
 using NUnit.Framework;
 using Xilium.CefGlue.Common.Shared.Serialization;
 
@@ -153,8 +154,9 @@ namespace CefGlue.Tests.Javascript
         }
 
         [Test]
-        public void CancelledOnTimeout()
+        public async Task CancelledOnTimeout()
         {
+            await WaitForJavascriptReady();
             var timeout = TimeSpan.FromMilliseconds(500);
             Assert.ThrowsAsync<TaskCanceledException>(async () => await EvaluateJavascript<string>($"var start = new Date(); while((new Date() - start) < ({timeout.TotalMilliseconds} + 200));", timeout));
         }
@@ -162,9 +164,20 @@ namespace CefGlue.Tests.Javascript
         [Test]
         public async Task NotCancelledBeforeTimeout()
         {
+            await WaitForJavascriptReady();
             var timeout = TimeSpan.FromMilliseconds(500);
             var result = await EvaluateJavascript<int>($"return 1;", timeout);
             Assert.AreEqual(1, result);
+        }
+
+        private async Task WaitForJavascriptReady()
+        {
+            var testName = TestContext.CurrentContext.Test.FullName;
+            TestDiagnostics.Write(testName, "js-readiness-start");
+            // LoadEnd can precede frame attachment; confirm an IPC round trip before testing the short deadline.
+            var result = await EvaluateJavascript<int>("return 42;", TimeSpan.FromSeconds(10)).WaitAsync(TestContext.CurrentContext.CancellationToken);
+            Assert.AreEqual(42, result);
+            TestDiagnostics.Write(testName, "js-readiness-complete");
         }
 
         [Test]

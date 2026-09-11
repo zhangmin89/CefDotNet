@@ -20,6 +20,73 @@ public class RequestHandlerReviewFixTests
 {
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    [TestCase(0)]
+    [TestCase(500)]
+    public async Task EvaluationReplyReceivedBeforeTheDeadlineIsReturned(int timeoutMilliseconds)
+    {
+        CefRuntime.Load();
+        using var native = new NativeRequests();
+        using var fixture = new Fixture();
+        using var tracking = CefObjectTracker.StartTracking();
+        var browser = native.Browser(1);
+        var frame = native.Frame(browser, 11);
+        native.RequestSent = taskId => Reply(fixture, browser, frame, taskId, "42");
+
+        var result = await fixture.Engine.Evaluate<int>("return 42;", "", 1, frame, TimeSpan.FromMilliseconds(timeoutMilliseconds)).WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.AreEqual(42, result);
+        Assert.AreEqual(0, fixture.Pending.Count);
+        Assert.IsNull(native.CallbackError);
+    }
+
+    [TestCase(-1)]
+    [TestCase(60000)]
+    public async Task PendingEvaluationWaitsForItsReply(int timeoutMilliseconds)
+    {
+        CefRuntime.Load();
+        using var native = new NativeRequests();
+        using var fixture = new Fixture();
+        using var tracking = CefObjectTracker.StartTracking();
+        var browser = native.Browser(1);
+        var frame = native.Frame(browser, 11);
+        var evaluation = fixture.Engine.Evaluate<int>("return 42;", "", 1, frame, TimeSpan.FromMilliseconds(timeoutMilliseconds));
+
+        Assert.IsFalse(evaluation.IsCompleted, "An unanswered request must remain pending before its deadline.");
+        Assert.AreEqual(1, fixture.Pending.Count);
+        Reply(fixture, browser, frame, native.Sent.Single().Request.TaskId, "42");
+
+        Assert.AreEqual(42, await evaluation.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.AreEqual(0, fixture.Pending.Count);
+        Assert.IsNull(native.CallbackError);
+    }
+
+    [Test]
+    public async Task TimedOutEvaluationIgnoresLateReplyWithoutCompletingTheNextRequest()
+    {
+        CefRuntime.Load();
+        using var native = new NativeRequests();
+        using var fixture = new Fixture();
+        using var tracking = CefObjectTracker.StartTracking();
+        var browser = native.Browser(1);
+        var frame = native.Frame(browser, 11);
+        var expired = fixture.Engine.Evaluate<int>("return 7;", "", 1, frame, TimeSpan.Zero);
+        var expiredId = native.Sent.Single().Request.TaskId;
+        Assert.ThrowsAsync<TaskCanceledException>(async () => await expired.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.AreEqual(0, fixture.Pending.Count);
+
+        var next = fixture.Engine.Evaluate<int>("return 42;", "", 1, frame, Timeout.InfiniteTimeSpan);
+        var nextId = native.Sent.Last().Request.TaskId;
+        Reply(fixture, browser, frame, expiredId, "7");
+        Assert.IsFalse(next.IsCompleted, "A late reply must not complete a different request.");
+        Assert.AreEqual(1, fixture.Pending.Count);
+        Reply(fixture, browser, frame, nextId, "42");
+
+        Assert.AreEqual(42, await next.WaitAsync(TimeSpan.FromSeconds(10)));
+        Assert.IsTrue(expired.IsCanceled);
+        Assert.AreEqual(0, fixture.Pending.Count);
+        Assert.IsNull(native.CallbackError);
+    }
+
     [TestCase(false)]
     [TestCase(true)]
     public async Task TerminationCancelsOnlyItsBrowserBeforeCallingUserHandler(bool disposeCallbackBrowser)
@@ -223,6 +290,7 @@ public class RequestHandlerReviewFixTests
         private readonly List<Slot> _owned = new();
         private readonly Dictionary<IDisposable, Slot> _wrappers = new();
         public readonly List<(long FrameId, Messages.JsEvaluationRequest Request)> Sent = new();
+        public Action<int>? RequestSent;
         public Exception? CallbackError;
         public int References => _owned.Sum(slot => slot.References);
         private Slot Add<T>() where T : unmanaged
@@ -303,7 +371,9 @@ public class RequestHandlerReviewFixTests
             try
             {
                 using var managed = CefProcessMessage.FromNative(message);
-                slot.Owner.Sent.Add((slot.Identifier, Messages.JsEvaluationRequest.FromCefMessage(managed)));
+                var request = Messages.JsEvaluationRequest.FromCefMessage(managed);
+                slot.Owner.Sent.Add((slot.Identifier, request));
+                slot.Owner.RequestSent?.Invoke(request.TaskId);
             }
             catch (Exception exception) { slot.Owner.CallbackError = exception; }
         }
