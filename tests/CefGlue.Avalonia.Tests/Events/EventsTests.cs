@@ -1,6 +1,8 @@
 ﻿using Avalonia.Controls;
 using CefGlue.Tests.Helpers;
 using NUnit.Framework;
+using System;
+using System.Text;
 using System.Threading.Tasks;
 using Xilium.CefGlue.Common.Events;
 
@@ -163,8 +165,10 @@ namespace CefGlue.Tests.Events
         public async Task JavascriptContextCreatedAreFiredWhenLoadingNewContent()
         {
             var testName = TestContext.CurrentContext.Test.FullName;
+            var cancellationToken = TestContext.CurrentContext.CancellationToken;
             var contextCreatedCalls = 0;
-            var contextCreatedEventsCompletionSource = new TaskCompletionSource<bool>();
+            var firstContextCreatedCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var contextCreatedEventsCompletionSource = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             void OnJavascriptContextCreated(object sender, JavascriptContextLifetimeEventArgs e)
             {
@@ -174,7 +178,11 @@ namespace CefGlue.Tests.Events
                 }
 
                 TestDiagnostics.Write(testName, "context-created-observed", $"frame={e.Frame.Identifier} main={e.Frame.IsMain} count={contextCreatedCalls}");
-                if (contextCreatedCalls == 2)
+                if (e.Frame.IsMain && contextCreatedCalls == 1)
+                {
+                    firstContextCreatedCompletionSource.SetResult(true);
+                }
+                else if (e.Frame.IsMain && contextCreatedCalls == 2)
                 {
                     contextCreatedEventsCompletionSource.SetResult(true);
                 }
@@ -185,13 +193,16 @@ namespace CefGlue.Tests.Events
                 Browser.JavascriptContextCreated += OnJavascriptContextCreated;
 
                 TestDiagnostics.Write(testName, "first-navigation-start");
-                await Browser.LoadContent($"<script>1+1</script>");
+                await Browser.LoadContent($"<script>1+1</script>").WaitAsync(cancellationToken);
                 TestDiagnostics.Write(testName, "first-navigation-loaded", $"contexts={contextCreatedCalls}");
+                // CEF does not guarantee delivery of the old frame's IPC messages during navigation.
+                TestDiagnostics.Write(testName, "first-context-wait", $"contexts={contextCreatedCalls}");
+                await firstContextCreatedCompletionSource.Task.WaitAsync(cancellationToken);
                 TestDiagnostics.Write(testName, "second-navigation-start");
-                await Browser.LoadContent($"<html/>");
+                await Browser.LoadContent($"<html/>").WaitAsync(cancellationToken);
                 TestDiagnostics.Write(testName, "second-navigation-loaded", $"contexts={contextCreatedCalls}");
                 TestDiagnostics.Write(testName, "context-pair-wait", $"contexts={contextCreatedCalls}");
-                await contextCreatedEventsCompletionSource.Task;
+                await contextCreatedEventsCompletionSource.Task.WaitAsync(cancellationToken);
                 TestDiagnostics.Write(testName, "context-pair-complete", $"contexts={contextCreatedCalls}");
             }
             finally
@@ -199,6 +210,42 @@ namespace CefGlue.Tests.Events
                 Browser.JavascriptContextCreated -= OnJavascriptContextCreated;
             }
 
+        }
+
+        [Test]
+        [Repeat(10)]
+        public async Task JavascriptContextCreatedIsFiredForLatestPageAfterConsecutiveNavigations()
+        {
+            const string finalContent = "<html><body>final navigation</body></html>";
+            var finalUrl = "data:text/html;charset=utf-8;base64," + Convert.ToBase64String(Encoding.UTF8.GetBytes(finalContent));
+            var testName = TestContext.CurrentContext.Test.FullName;
+            var cancellationToken = TestContext.CurrentContext.CancellationToken;
+            var finalContextCreated = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            void OnJavascriptContextCreated(object sender, JavascriptContextLifetimeEventArgs e)
+            {
+                var isFinalPage = e.Frame.IsMain && e.Frame.Url == finalUrl;
+                TestDiagnostics.Write(testName, "context-created-observed", $"frame={e.Frame.Identifier} main={e.Frame.IsMain} finalPage={isFinalPage}");
+                if (isFinalPage)
+                {
+                    finalContextCreated.TrySetResult(true);
+                }
+            }
+
+            try
+            {
+                Browser.JavascriptContextCreated += OnJavascriptContextCreated;
+                // Keep rapid navigation coverage without requiring delivery from the replaced frame.
+                await Browser.LoadContent("<script>1+1</script>").WaitAsync(cancellationToken);
+                await Browser.LoadContent(finalContent).WaitAsync(cancellationToken);
+                TestDiagnostics.Write(testName, "final-context-wait");
+                await finalContextCreated.Task.WaitAsync(cancellationToken);
+                TestDiagnostics.Write(testName, "final-context-complete");
+            }
+            finally
+            {
+                Browser.JavascriptContextCreated -= OnJavascriptContextCreated;
+            }
         }
 
         [Test]
