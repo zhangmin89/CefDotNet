@@ -98,6 +98,7 @@ namespace CefGlue.Tests.Build
         public Task<string> DotnetAsync(string name, params string[] arguments)
         {
             var common = new List<string> { "-c", "Release", "-nologo", "-verbosity:minimal", "-m:1", "-nr:false", "-p:UseSharedCompilation=false", $"-p:ArtifactsPath={_sourceArtifactsPath ?? Work}", $"-p:RestoreAdditionalProjectSources={Feed}", $"-p:RestorePackagesPath={Packages}" };
+            if (name == "neutral-pack" || _sourceArtifactsPath != null) { common.Add("-clp:PerformanceSummary"); }
             if (Directory.Exists(_globalPackages)) { common.Add($"-p:RestoreFallbackFolders={_globalPackages}"); }
             return _commands.RunAsync(name, _dotnet, RepositoryRoot, arguments.Concat(common));
         }

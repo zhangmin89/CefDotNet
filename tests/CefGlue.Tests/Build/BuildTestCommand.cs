@@ -30,6 +30,8 @@ namespace CefGlue.Tests.Build
                 RedirectStandardError = true
             };
             foreach (var argument in arguments) { info.ArgumentList.Add(argument); }
+            // The diagnostics summarizer parses MSBuild's performance section headings.
+            if (info.ArgumentList.Contains("-clp:PerformanceSummary")) { info.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en"; }
             info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
             info.Environment["DOTNET_DISABLE_GUI_ERRORS"] = "1";
             TestContext.Progress.WriteLine($"COMMAND {fileName} {string.Join(' ', info.ArgumentList)}\nWORKING_DIRECTORY {workingDirectory}");

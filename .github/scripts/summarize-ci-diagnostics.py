@@ -11,6 +11,14 @@ from zipfile import ZipFile
 WARNING = re.compile(r"((?:src|tests)[/\\].+?)\((\d+),(\d+)\): warning (CS\d+): (.*?)(?: \[.*\])?$")
 PHASE = re.compile(r"ticks=(\d+) frequency=(\d+) pid=(\d+) thread=\d+ test=(.*?) stage=(\S+)")
 GUID_SUFFIX = re.compile(r"-[0-9a-f]{32}$")
+PERFORMANCE_SECTIONS = {
+    "Project Evaluation Performance Summary:": "project_evaluation",
+    "Project Performance Summary:": "projects",
+    "Target Performance Summary:": "targets",
+    "Task Performance Summary:": "tasks",
+}
+# Project summaries contain more deeply indented per-target subtotals; those are not projects.
+PERFORMANCE_ROW = re.compile(r"^ {0,8}(\d+) ms\s+(.+?)\s+(\d+) calls\s*$")
 SIGNALS = {
     "objc_duplicate_class": "Class ExtensionDropdownHandler is implemented in both",
     "shader_compile_timeout": "Compilation took longer than",
@@ -76,6 +84,43 @@ def slowest_commands(entries, limit=20):
             evidence=location,
         ))
     return sorted(commands, key=lambda command: command["seconds"], reverse=True)[:limit]
+
+
+def msbuild_performance(contents):
+    sections = {}
+    section = None
+    for line in contents.splitlines():
+        if line in PERFORMANCE_SECTIONS:
+            section = sections.setdefault(PERFORMANCE_SECTIONS[line], {})
+        elif line and not line[0].isspace():
+            section = None
+        elif section is not None:
+            match = PERFORMANCE_ROW.match(line)
+            if match:
+                milliseconds, name, calls = match.groups()
+                row = section.setdefault(name, dict(name=name, milliseconds=0, calls=0))
+                row["milliseconds"] += int(milliseconds)
+                row["calls"] += int(calls)
+    result = {}
+    for name, rows in sections.items():
+        ordered = sorted(rows.values(), key=lambda row: row["milliseconds"], reverse=True)
+        # Keep every task so even a short Csc invocation remains distinguishable from no invocation.
+        if name == "targets":
+            ordered = ordered[:20]
+        result[name] = [dict(name=row["name"], seconds=row["milliseconds"] / 1000, calls=row["calls"]) for row in ordered]
+    return result
+
+
+def add_command_performance(commands, entries):
+    by_log = {command["evidence"].removesuffix(".command.json") + ".stdout.log": command for command in commands}
+    for location, contents in entries:
+        location = location.replace("\\", "/")
+        command = by_log.get(location)
+        if command is not None:
+            performance = msbuild_performance(contents)
+            if performance:
+                # Project and target times include nested work; tasks aggregate across all projects.
+                command["msbuild_performance"] = dict(evidence=location, project_times_include_dependencies=True, task_times_are_command_totals=True, **performance)
 
 
 def summarize(entries, root):
@@ -144,6 +189,7 @@ def main():
     root = Path(__file__).resolve().parents[2]
     report = summarize((entry for path in args.inputs for entry in logs(path)), root)
     report["slowest_commands"] = slowest_commands((entry for path in [*args.commands, *args.inputs] for entry in command_logs(path)))
+    add_command_performance(report["slowest_commands"], (entry for path in [*args.commands, *args.inputs] for entry in logs(path)))
     with args.output.open("x", encoding="utf-8") as output:
         json.dump(report, output, ensure_ascii=False, indent=2)
     if args.output.stat().st_size == 0:

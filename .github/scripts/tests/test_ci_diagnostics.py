@@ -5,11 +5,33 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[3]
 SPEC = importlib.util.spec_from_file_location("ci_diagnostics", ROOT / ".github/scripts/summarize-ci-diagnostics.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+
+PERFORMANCE = """Project Evaluation Performance Summary:
+       12 ms  /repo/src/Library.csproj   2 calls
+
+Project Performance Summary:
+      120 ms  /repo/src/Library.csproj   2 calls
+                 80 ms  Build                                      1 calls
+                 40 ms  Restore                                    1 calls
+
+Target Performance Summary:
+       80 ms  CoreCompile                               1 calls
+       30 ms  Restore                                   1 calls
+
+Task Performance Summary:
+       70 ms  Csc                                       1 calls
+        6 ms  Copy                                      2 calls
+       25 ms  RestoreTask                               1 calls
+
+Build succeeded.
+      999 ms  ThisIsNotAPerformanceRow                   1 calls
+"""
 
 
 class CiDiagnosticsTests(unittest.TestCase):
@@ -88,6 +110,51 @@ class CiDiagnosticsTests(unittest.TestCase):
         self.assertEqual("cmd24", result[0]["command"])
         self.assertEqual(1, result[-1]["exit_code"])
 
+    def test_msbuild_performance_separates_projects_targets_and_tasks(self):
+        result = MODULE.msbuild_performance(PERFORMANCE)
+        self.assertEqual([dict(name="/repo/src/Library.csproj", seconds=0.12, calls=2)], result["projects"])
+        self.assertEqual([dict(name="/repo/src/Library.csproj", seconds=0.012, calls=2)], result["project_evaluation"])
+        self.assertEqual(["CoreCompile", "Restore"], [row["name"] for row in result["targets"]])
+        self.assertEqual(["Csc", "RestoreTask", "Copy"], [row["name"] for row in result["tasks"]])
+        self.assertEqual(dict(name="Csc", seconds=0.07, calls=1), result["tasks"][0])
+
+    def test_msbuild_performance_combines_separate_restore_and_build_summaries(self):
+        result = MODULE.msbuild_performance(PERFORMANCE + PERFORMANCE)
+        self.assertEqual(dict(name="Csc", seconds=0.14, calls=2), result["tasks"][0])
+        self.assertEqual(dict(name="/repo/src/Library.csproj", seconds=0.24, calls=4), result["projects"][0])
+
+    def test_msbuild_performance_does_not_invent_skipped_compiler_calls(self):
+        result = MODULE.msbuild_performance("Task Performance Summary:\n        0 ms  Copy                                      1 calls\n")
+        self.assertEqual([dict(name="Copy", seconds=0.0, calls=1)], result["tasks"])
+        self.assertEqual({}, MODULE.msbuild_performance("ordinary command output"))
+
+    def test_command_performance_reads_directory_and_zip_without_duplicate_attachment_timings(self):
+        for zipped in (False, True):
+            with self.subTest(zipped=zipped), tempfile.TemporaryDirectory() as directory:
+                workspace = Path(directory)
+                raw = workspace / "logs/02-neutral-pack.command.json"
+                copy = workspace / "In/guid/ZM/02-neutral-pack.command.json"
+                data = dict(Name="neutral-pack", PID=42, ExitCode=0, DurationSeconds=78.9, Arguments=["pack"])
+                for path in (raw, copy):
+                    path.parent.mkdir(parents=True)
+                    path.write_text(json.dumps(data), encoding="utf-8")
+                    path.with_name("02-neutral-pack.stdout.log").write_text(PERFORMANCE, encoding="utf-8")
+                if zipped:
+                    source = workspace / "test-results.zip"
+                    with ZipFile(source, "w") as archive:
+                        for path in (raw, copy):
+                            archive.write(path, path.relative_to(workspace).as_posix())
+                            stdout = path.with_name("02-neutral-pack.stdout.log")
+                            archive.write(stdout, stdout.relative_to(workspace).as_posix())
+                else:
+                    source = workspace
+                commands = MODULE.slowest_commands(MODULE.command_logs(source))
+                MODULE.add_command_performance(commands, MODULE.logs(source))
+                self.assertEqual(1, len(commands))
+                performance = commands[0]["msbuild_performance"]
+                self.assertEqual(1, performance["tasks"][0]["calls"])
+                self.assertEqual(commands[0]["evidence"].replace(".command.json", ".stdout.log"), performance["evidence"])
+
     def test_workflow_summarizes_with_and_without_raw_command_logs(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
         step = workflow.split("      - name: Summarize warnings and test phase timings\n", 1)[1].split("\n      - name:", 1)[0]
@@ -104,6 +171,7 @@ class CiDiagnosticsTests(unittest.TestCase):
                     log = workspace / "artifacts/browser-process-nunit-0123456789abcdef0123456789abcdef/logs/02-neutral-pack.command.json"
                     log.parent.mkdir(parents=True)
                     log.write_text(json.dumps(dict(Name="neutral-pack", PID=42, ExitCode=0, DurationSeconds=78.9, Arguments=["pack"])), encoding="utf-8")
+                    log.with_name("02-neutral-pack.stdout.log").write_text(PERFORMANCE, encoding="utf-8")
                 result = subprocess.run([sys.executable, "-c", code], cwd=workspace, capture_output=True, text=True, encoding="utf-8")
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
                 report = json.loads((workspace / "artifacts/ci-diagnostics.json").read_text(encoding="utf-8"))
@@ -114,6 +182,7 @@ class CiDiagnosticsTests(unittest.TestCase):
                     self.assertEqual(78.9, commands[0]["seconds"])
                     self.assertEqual(0, commands[0]["exit_code"])
                     self.assertEqual(log.relative_to(workspace).as_posix(), commands[0]["evidence"])
+                    self.assertEqual(dict(name="Csc", seconds=0.07, calls=1), commands[0]["msbuild_performance"]["tasks"][0])
                 else:
                     self.assertEqual([], commands)
 
