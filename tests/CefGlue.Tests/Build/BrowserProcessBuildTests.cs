@@ -28,7 +28,7 @@ namespace CefGlue.Tests.Build
         [TestCase(true)]
         public async Task ConsumerBuildCreatesMatchingHelperAndCompleteNativeAssets(bool sourceReference)
         {
-            var workspace = _suite.CreateCase(nameof(ConsumerBuildCreatesMatchingHelperAndCompleteNativeAssets));
+            var workspace = _suite.CreateCase(nameof(ConsumerBuildCreatesMatchingHelperAndCompleteNativeAssets), shareSourceArtifacts: sourceReference);
             var project = workspace.CreateConsumer(sourceReference);
             await workspace.DotnetAsync("default-build", "build", project);
             ValidateOutput(workspace, workspace.BuildOutput(), workspace.NativeRid, sourceReference);
@@ -41,7 +41,7 @@ namespace CefGlue.Tests.Build
         [TestCase(true, "native")]
         public async Task ConsumerPublishKeepsHelperIndependentlyExecutable(bool sourceReference, string mode)
         {
-            var workspace = _suite.CreateCase(nameof(ConsumerPublishKeepsHelperIndependentlyExecutable));
+            var workspace = _suite.CreateCase(nameof(ConsumerPublishKeepsHelperIndependentlyExecutable), shareSourceArtifacts: sourceReference);
             var project = workspace.CreateConsumer(sourceReference);
             var output = Path.Combine(workspace.Root, "publish");
             var arguments = new List<string> { "publish", project, "-o", output };
@@ -65,7 +65,7 @@ namespace CefGlue.Tests.Build
         [TestCase(true, false)]
         public async Task SelfContainedPublishStartsHelperWithAppLocalRuntime(bool sourceReference, bool singleFile)
         {
-            var workspace = _suite.CreateCase(nameof(SelfContainedPublishStartsHelperWithAppLocalRuntime));
+            var workspace = _suite.CreateCase(nameof(SelfContainedPublishStartsHelperWithAppLocalRuntime), shareSourceArtifacts: sourceReference);
             var project = workspace.CreateConsumer(sourceReference);
             var output = Path.Combine(workspace.Root, "publish");
             await workspace.DotnetAsync("publish-self-contained", "publish", project, "-r", workspace.NativeRid, "--self-contained", "true", $"-p:PublishSingleFile={singleFile}", "-o", output);

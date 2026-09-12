@@ -159,8 +159,23 @@ jobs:
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: python
         run: |
-          import subprocess, sys
-          subprocess.run([sys.executable, '.github/scripts/summarize-ci-diagnostics.py', 'artifacts/build-warnings.log', 'artifacts/test-results', '--output', 'artifacts/ci-diagnostics.json'], check=True)
+          import glob, subprocess, sys
+          # Raw workspace command logs cover fixture setup (OneTimeSetUp) commands that never reach TRX attachments.
+          # Absent roots (skipped suites) are dropped here; the summarizer still rejects explicitly wrong paths.
+          command_roots = []
+          for pattern in [
+              'artifacts/browser-process-nunit-*/logs',
+              'artifacts/browser-process-nunit-*/*/logs',
+              'artifacts/apphost-review-*/logs',
+              'artifacts/browser-process-deps-*/logs',
+              'artifacts/runtime-assets-*',
+          ]:
+              command_roots += sorted(glob.glob(pattern))
+          args = ['artifacts/build-warnings.log', 'artifacts/test-results']
+          for root in command_roots:
+              args += ['--commands', root]
+          args += ['--output', 'artifacts/ci-diagnostics.json']
+          subprocess.run([sys.executable, '.github/scripts/summarize-ci-diagnostics.py', *args], check=True)
 
       - name: Upload test results and CEF logs
         if: ${{ always() && steps.build.outcome == 'success' }}
@@ -172,4 +187,9 @@ jobs:
             artifacts/test-results/
             artifacts/build-warnings.log
             artifacts/ci-diagnostics.json
+            artifacts/browser-process-nunit-*/logs/
+            artifacts/browser-process-nunit-*/*/logs/
+            artifacts/apphost-review-*/logs/
+            artifacts/browser-process-deps-*/logs/
+            artifacts/runtime-assets-*/
             tests/**/bin/Release/net8.0/**/javascript-execution-*.log

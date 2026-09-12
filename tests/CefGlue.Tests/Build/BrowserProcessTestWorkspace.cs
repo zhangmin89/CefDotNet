@@ -13,6 +13,7 @@ namespace CefGlue.Tests.Build
         private readonly string _dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
         private readonly BuildTestCommand _commands;
         private string _globalPackages = "";
+        private string? _sourceArtifactsPath;
 
         private BrowserProcessTestWorkspace(string repositoryRoot, string root, string feed, string packages, string version)
         {
@@ -54,9 +55,9 @@ namespace CefGlue.Tests.Build
             return workspace;
         }
 
-        public BrowserProcessTestWorkspace CreateCase(string name)
+        public BrowserProcessTestWorkspace CreateCase(string name, bool shareSourceArtifacts = false)
         {
-            return new BrowserProcessTestWorkspace(RepositoryRoot, Path.Combine(Root, name + "-" + Guid.NewGuid().ToString("N")), Feed, Packages, Version) { _globalPackages = _globalPackages };
+            return new BrowserProcessTestWorkspace(RepositoryRoot, Path.Combine(Root, name + "-" + Guid.NewGuid().ToString("N")), Feed, Packages, Version) { _globalPackages = _globalPackages, _sourceArtifactsPath = shareSourceArtifacts ? Path.Combine(Root, "source-work") : null };
         }
 
         public string WriteFile(string relativePath, string content)
@@ -71,7 +72,10 @@ namespace CefGlue.Tests.Build
 
         public string CreateConsumer(bool sourceReference)
         {
-            WriteFile("Directory.Build.props", "<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors></PropertyGroup></Project>");
+            // Keep each Consumer's restore state and outputs private while both restore and build share the source dependency root.
+            var work = SecurityElement.Escape(Work.Replace('\\', '/'));
+            var consumerPaths = _sourceArtifactsPath == null ? "" : $"<BaseIntermediateOutputPath>{work}/obj/Consumer/</BaseIntermediateOutputPath><BaseOutputPath>{work}/bin/Consumer/</BaseOutputPath>";
+            WriteFile("Directory.Build.props", $"<Project><PropertyGroup><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><TreatWarningsAsErrors>true</TreatWarningsAsErrors>{consumerPaths}</PropertyGroup></Project>");
             var repo = SecurityElement.Escape(RepositoryRoot.Replace('\\', '/'));
             WriteFile("Directory.Build.targets", $"<Project><Import Project=\"{repo}/Directory.Build.targets\" Condition=\"'$(CefGlueUseLocalRuntimeAssets)' == 'true'\" /></Project>");
             WriteFile("Directory.Packages.props", "<Project />");
@@ -93,7 +97,7 @@ namespace CefGlue.Tests.Build
 
         public Task<string> DotnetAsync(string name, params string[] arguments)
         {
-            var common = new List<string> { "-c", "Release", "-nologo", "-verbosity:minimal", "-m:1", "-nr:false", "-p:UseSharedCompilation=false", $"-p:ArtifactsPath={Work}", $"-p:RestoreAdditionalProjectSources={Feed}", $"-p:RestorePackagesPath={Packages}" };
+            var common = new List<string> { "-c", "Release", "-nologo", "-verbosity:minimal", "-m:1", "-nr:false", "-p:UseSharedCompilation=false", $"-p:ArtifactsPath={_sourceArtifactsPath ?? Work}", $"-p:RestoreAdditionalProjectSources={Feed}", $"-p:RestorePackagesPath={Packages}" };
             if (Directory.Exists(_globalPackages)) { common.Add($"-p:RestoreFallbackFolders={_globalPackages}"); }
             return _commands.RunAsync(name, _dotnet, RepositoryRoot, arguments.Concat(common));
         }

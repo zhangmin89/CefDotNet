@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO.Compression;
 using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
@@ -11,6 +12,7 @@ namespace CefGlue.Tests.Build
     {
         private static readonly string[] ManagedNames = ["Xilium.CefGlue.BrowserProcess", "Xilium.CefGlue.Common.Shared", "Xilium.CefGlue"];
         private static readonly string[] PayloadNames = [.. ManagedNames.Select(name => name + ".dll"), "Xilium.CefGlue.BrowserProcess.deps.json", "Xilium.CefGlue.BrowserProcess.runtimeconfig.json"];
+        private static readonly ConcurrentDictionary<(string Path, long Length, DateTime Modified), string> NativeSourceHashes = new();
 
         public static void RequireFile(string path)
         {
@@ -165,7 +167,7 @@ namespace CefGlue.Tests.Build
             {
                 var destination = Path.Combine(directory, file.Relative);
                 Assert.IsTrue(File.Exists(destination), $"Missing CEF resource: {file.Relative}");
-                Assert.AreEqual(HashFile(file.Source), HashFile(destination), $"CEF resource differs from {rid} package: {file.Relative}");
+                Assert.AreEqual(NativeSourceHash(file.Source), HashFile(destination), $"CEF resource differs from {rid} package: {file.Relative}");
             }
             var runtimes = Path.Combine(directory, "runtimes");
             if (Directory.Exists(runtimes))
@@ -226,6 +228,12 @@ namespace CefGlue.Tests.Build
             Assert.AreEqual("Major", options.GetProperty("rollForward").GetString());
             Assert.IsFalse(options.TryGetProperty("includedFrameworks", out _), "BrowserProcess must not carry a private runtime.");
             Assert.AreEqual("Microsoft.NETCore.App", options.GetProperty("framework").GetProperty("name").GetString());
+        }
+
+        private static string NativeSourceHash(string path)
+        {
+            var file = new FileInfo(path);
+            return NativeSourceHashes.GetOrAdd((file.FullName, file.Length, file.LastWriteTimeUtc), key => HashFile(key.Path));
         }
 
         private static string HashFile(string path)
